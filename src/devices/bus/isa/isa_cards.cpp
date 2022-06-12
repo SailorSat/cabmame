@@ -69,6 +69,7 @@
 #include "3c503.h"
 #include "ne1000.h"
 #include "ne2000.h"
+#include "enet16.h"
 #include "3c505.h"
 #include "eis_sad8852.h"
 #include "eis_twib.h"
@@ -190,6 +191,7 @@ void pc_isa16_cards(device_slot_interface &device)
 	// 16-bit
 	device.option_add("ide", ISA16_IDE);
 	device.option_add("ne2000", NE2000);
+	device.option_add("enet16", ISA16_ENET16);
 	device.option_add("aha1542a", AHA1542A);
 	device.option_add("aha1542b", AHA1542B);
 	device.option_add("aha1542c", AHA1542C);

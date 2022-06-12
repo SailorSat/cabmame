@@ -1669,6 +1669,8 @@ if (BUSES["ISA"]~=null) then
 		MAME_DIR .. "src/devices/bus/isa/ne1000.h",
 		MAME_DIR .. "src/devices/bus/isa/ne2000.cpp",
 		MAME_DIR .. "src/devices/bus/isa/ne2000.h",
+		MAME_DIR .. "src/devices/bus/isa/enet16.cpp",
+		MAME_DIR .. "src/devices/bus/isa/enet16.h",
 		MAME_DIR .. "src/devices/bus/isa/3c505.cpp",
 		MAME_DIR .. "src/devices/bus/isa/3c505.h",
 		MAME_DIR .. "src/devices/bus/isa/lpt.cpp",

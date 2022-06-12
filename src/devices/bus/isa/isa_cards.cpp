@@ -86,6 +86,8 @@
 #include "chessmsr.h"
 #include "finalchs.h"
 #include "bblue2.h"
+#include "insidetrak.h"
+
 
 
 void pc_isa8_cards(device_slot_interface &device)
@@ -192,6 +194,7 @@ void pc_isa16_cards(device_slot_interface &device)
 	device.option_add("ide", ISA16_IDE);
 	device.option_add("ne2000", NE2000);
 	device.option_add("enet16", ISA16_ENET16);
+	device.option_add("insidetrak", ISA16_INSIDETRAK);
 	device.option_add("aha1542a", AHA1542A);
 	device.option_add("aha1542b", AHA1542B);
 	device.option_add("aha1542c", AHA1542C);

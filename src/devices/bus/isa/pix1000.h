@@ -8,8 +8,8 @@
 #include "isa.h"
 //#include "cpu/m88000/m88000.h"
 
-#define PIX_CLOCK   XTAL(40'000'000)
-
+#define PIX_CLOCK       XTAL(40'000'000)
+#define PIX_FIFOSIZE    2048
 
 class pix1000_device: public device_t,
 						public device_isa16_card_interface
@@ -47,7 +47,19 @@ private:
 	uint32_t m88110b_r(offs_t offset, uint32_t mem_mask);
 	void m88110b_w(offs_t offset, uint32_t data, uint32_t mem_mask);
 
-	uint16_t m_fifo[2*1024];
+	uint16_t m_fifo[PIX_FIFOSIZE];
+	uint8_t m_fifo_pos;
+	uint8_t m_fifo_end;
+
+	uint8_t m_proc_reg0;
+	uint8_t m_proc_reg1;
+	uint8_t m_proc_reg2;
+	uint8_t m_proc_reg3;
+	uint8_t m_proc_reg4;
+
+	void fifo_push(uint16_t data);
+	uint16_t fifo_pop();
+	uint16_t fifo_depth() const { return m_fifo_end - m_fifo_pos; }
 };
 
 DECLARE_DEVICE_TYPE(ISA16_PIX1000, pix1000_device)

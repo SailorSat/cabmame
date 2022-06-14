@@ -28,6 +28,14 @@ Notes:
 #include "emu.h"
 #include "insidetrak.h"
 
+
+static INPUT_PORTS_START( insidetrak )
+	PORT_START("INSIDETRAK_IO_BASE")
+	PORT_CONFNAME(0x01, 0x00, "InsideTRAK I/O address")
+	PORT_CONFSETTING( 0x00, "270")
+	PORT_CONFSETTING( 0x01, "278")
+INPUT_PORTS_END
+
 ROM_START( insidetrak )
 	ROM_REGION32_LE(0x040000, "tracker", 0)
 
@@ -50,20 +58,22 @@ ROM_START( insidetrak )
 	ROMX_LOAD( "ver_151_07_u17.u17", 0x00002, 0x20000, CRC(b7201df9) SHA1(8ec0f19de4d26bcd83bfd245387ade0471406472), ROM_GROUPWORD | ROM_SKIP(2) | ROM_BIOS(3) )
 ROM_END
 
-DEFINE_DEVICE_TYPE(ISA16_INSIDETRAK, insidetrak_device, "insidetrak", "Polhemus InsideTRAK")
-
-void insidetrak_device::cpu_map(address_map &map)
+ioport_constructor insidetrak_device::device_input_ports() const
 {
-	map(0x000000, 0x00ffff).rom().region("tracker", 0);
-	map(0x010001, 0x010001).rw(FUNC(insidetrak_device::tms32031_010001_r), FUNC(insidetrak_device::tms32031_010001_w));
-	map(0x020000, 0x027fff).ram();
-	map(0x808000, 0x8080ff).rw(FUNC(insidetrak_device::tms32031_io_r), FUNC(insidetrak_device::tms32031_io_w));
+	return INPUT_PORTS_NAME(insidetrak);
 }
+
+const tiny_rom_entry *insidetrak_device::device_rom_region() const
+{
+	return ROM_NAME( insidetrak );
+}
+
+DEFINE_DEVICE_TYPE(ISA16_INSIDETRAK, insidetrak_device, "insidetrak", "Polhemus InsideTRAK")
 
 void insidetrak_device::device_add_mconfig(machine_config &config)
 {
 	TMS32031(config, m_tms32031, INSIDETRAK_CLOCK1);
-	m_tms32031->set_addrmap(AS_PROGRAM, &insidetrak_device::cpu_map);
+	m_tms32031->set_addrmap(AS_PROGRAM, &insidetrak_device::tms32031_map);
 }
 
 insidetrak_device::insidetrak_device(const machine_config& mconfig, const char* tag, device_t* owner, uint32_t clock)
@@ -86,6 +96,12 @@ void insidetrak_device::device_reset()
 	m_010001 = 0 ;
 }
 
+/*************************************************************
+ *
+ * ISA BUS
+ *
+ *************************************************************/
+ 
 void insidetrak_device::map_io()
 {
 	uint8_t io_base = ioport("INSIDETRAK_IO_BASE")->read() & 0x1;
@@ -102,13 +118,16 @@ void insidetrak_device::map_io()
 uint16_t insidetrak_device::isa_port_r(offs_t offset, uint16_t mem_mask) {
 	if ((mem_mask == 0xffff) && (offset == 0)) {
 		// 16bit read @ 0 = read fifo
-		logerror("insidetrak: isa port word read %04X @ %04X\n", offset, mem_mask);
-		return 0xffff;
+		return recv_fifo_pop();
 	}
 	if ((mem_mask == 0xff00) && (offset == 0)) {
-		// 8bit read @ 1 = read status
-		logerror("insidetrak: isa port byte read %04X @ %04X\n", offset, mem_mask);
-		return 0xFE00;
+		// 8bit read @ 1 = read fifo status
+		// b0 = recv fifo; 0 empty, 1 data
+		// b1 = xmit fifo; 0 full, 1 free (not implemented yet)
+		uint8_t ret = 0xFC;
+		if (m_recv_fifo_end == 0) ret |= 1;
+		if (m_xmit_fifo_end < INSIDETRAK_FIFOSIZE) ret |= 2;
+		return ret << 16;
 	}
 	logerror("insidetrak: unhandled isa port read %04X @ %04X\n", offset, mem_mask);
 	return 0xffff;
@@ -121,7 +140,7 @@ void insidetrak_device::isa_port_w(offs_t offset, uint16_t data, uint16_t mem_ma
 	}
 	if ((mem_mask == 0x00ff) && (offset == 0)) {
 		// 8bit write @ 0 = write fifo
-		logerror("insidetrak: isa port byte write %04X @ %04X, %04X\n", offset, mem_mask, data);
+		xmit_fifo_push(data);
 		return;
 	}
 	if ((mem_mask == 0xff00) && (offset == 0)) {
@@ -136,6 +155,20 @@ void insidetrak_device::isa_port_w(offs_t offset, uint16_t data, uint16_t mem_ma
 	}
 	logerror("insidetrak: unhandled isa port byte write %04X @ %04X, %04X\n", offset, mem_mask, data);
 	return;
+}
+
+/*************************************************************
+ *
+ * Internal BUS
+ *
+ *************************************************************/
+
+void insidetrak_device::tms32031_map(address_map &map)
+{
+	map(0x000000, 0x00ffff).rom().region("tracker", 0);
+	map(0x010001, 0x010001).rw(FUNC(insidetrak_device::tms32031_010001_r), FUNC(insidetrak_device::tms32031_010001_w));
+	map(0x020000, 0x027fff).ram();
+	map(0x808000, 0x8080ff).rw(FUNC(insidetrak_device::tms32031_io_r), FUNC(insidetrak_device::tms32031_io_w));
 }
 
 uint32_t insidetrak_device::tms32031_010001_r(offs_t offset)
@@ -164,19 +197,36 @@ void insidetrak_device::tms32031_io_w(offs_t offset, uint32_t data, uint32_t mem
 	return;
 }
 
-static INPUT_PORTS_START( insidetrak )
-	PORT_START("INSIDETRAK_IO_BASE")
-	PORT_CONFNAME(0x01, 0x00, "InsideTRAK I/O address")
-	PORT_CONFSETTING( 0x00, "270")
-	PORT_CONFSETTING( 0x01, "278")
-INPUT_PORTS_END
-
-ioport_constructor insidetrak_device::device_input_ports() const
+void insidetrak_device::recv_fifo_push(uint16_t data)
 {
-	return INPUT_PORTS_NAME(insidetrak);
+	if (m_recv_fifo_end >= INSIDETRAK_FIFOSIZE) return;
+	m_recv_fifo[m_recv_fifo_end++] = data;
 }
 
-const tiny_rom_entry *insidetrak_device::device_rom_region() const
+uint16_t insidetrak_device::recv_fifo_pop()
 {
-	return ROM_NAME( insidetrak );
+	uint16_t ret = 0xffff;
+	if (m_recv_fifo_pos < m_recv_fifo_end) ret = m_recv_fifo[m_recv_fifo_pos++];
+	if (m_recv_fifo_pos == m_recv_fifo_end) {
+		m_recv_fifo_pos = 0;
+		m_recv_fifo_end = 0;
+	}
+	return ret;
+}
+
+void insidetrak_device::xmit_fifo_push(uint8_t data)
+{
+	if (m_xmit_fifo_end >= INSIDETRAK_FIFOSIZE) return;
+	m_xmit_fifo[m_xmit_fifo_end++] = data;
+}
+
+uint8_t insidetrak_device::xmit_fifo_pop()
+{
+	uint8_t ret = 0xff;
+	if (m_xmit_fifo_pos < m_xmit_fifo_end) ret = m_xmit_fifo[m_xmit_fifo_pos++];
+	if (m_xmit_fifo_pos == m_xmit_fifo_end) {
+		m_xmit_fifo_pos = 0;
+		m_xmit_fifo_end = 0;
+	}
+	return ret;
 }

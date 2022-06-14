@@ -67,6 +67,17 @@ void pix1000_device::device_reset()
 {
 	map_io();
 	map_ram();
+
+	memset(m_fifo, 0, 2*PIX_FIFOSIZE);
+
+	m_fifo_pos = 0;
+	m_fifo_end = 0;
+
+	m_proc_reg0 = 0;
+	m_proc_reg1 = 0;
+	m_proc_reg2 = 0;
+	m_proc_reg3 = 0;
+	m_proc_reg4 = 0;
 }
 
 void pix1000_device::device_reset_after_children()
@@ -103,14 +114,39 @@ void pix1000_device::map_ram()
 
 uint8_t pix1000_device::isa_proc_r(offs_t offset)
 {
-	logerror("pix1000: unhandled proc read @ %02x\n", offset);
-	return 0xff;
+	switch (offset) {
+		case 0:
+			// execute fifo?
+			return 0xdf;
+		default:
+			logerror("pix1000: unhandled proc read @ %02x\n", offset);
+			return 0xff;
+	}
 }
 
 void pix1000_device::isa_proc_w(offs_t offset, uint8_t data)
 {
-	if (offset == 0) map_ram(); // dirty hack to keep memory mapping active
-	logerror("pix1000: unhandled proc write @ %02x, %02x\n", offset, data);
+	switch (offset) {
+		case 0:
+			m_proc_reg0 = data;
+			return;
+		case 1:
+			m_proc_reg1 = data;
+			return;
+		case 2:
+			m_proc_reg2 = data;
+			return;
+		case 3:
+			map_ram(); // dirty hack to keep memory mapping active
+			m_proc_reg3 = data;
+			return;
+		case 4:
+			map_ram(); // dirty hack to keep memory mapping active
+			m_proc_reg3 = data;
+			return;
+		default:
+			logerror("pix1000: unhandled proc write @ %02x, %02x\n", offset, data);
+	}
 }
 
 uint16_t pix1000_device::isa_fifo_r(offs_t offset, uint16_t mem_mask) {
@@ -119,20 +155,32 @@ uint16_t pix1000_device::isa_fifo_r(offs_t offset, uint16_t mem_mask) {
 }
 
 void pix1000_device::isa_fifo_w(offs_t offset, uint16_t data, uint16_t mem_mask) {
+	if ((mem_mask == 0xffff) && (offset == 0)) {
+		fifo_push(data);
+		return;
+	}
 	logerror("pix1000: unhandled fifo write %04X;%04X, %04X\n", offset, mem_mask, data);
 }
 
 uint8_t pix1000_device::isa_mem_r(offs_t offset)
 {
-	logerror("pix1000: unhandled mem read @ %02x\n", offset);
+	uint32_t address = (m_proc_reg1 << 24) | (m_proc_reg2 << 16) | ( offset & 0xffff );
+	logerror("pix1000: unhandled mem read @ %02x / %08x\n", offset, address);
 	return 0xff;
 }
 
 void pix1000_device::isa_mem_w(offs_t offset, uint8_t data)
 {
 	if (offset == 0) map_ram(); // dirty hack to keep memory mapping active
-	logerror("pix1000: unhandled mem write @ %02x, %02x\n", offset, data);
+	uint32_t address = (m_proc_reg1 << 24) | (m_proc_reg2 << 16) | ( offset & 0xffff );
+	logerror("pix1000: unhandled mem write @ %02x / %08x, %02x\n", offset, address, data);
 }
+
+/*************************************************************
+ *
+ * Internal BUS
+ *
+ *************************************************************/
 
 void pix1000_device::m88110a_map(address_map &map)
 {
@@ -166,4 +214,27 @@ void pix1000_device::m88110b_w(offs_t offset, uint32_t data, uint32_t mem_mask)
 {
 	logerror("pix1000: unhandled mc88110b write %08x:%08x, %08x\n", offset, mem_mask, data);
 	return;
+}
+
+/*************************************************************
+ *
+ * other logic
+ *
+ *************************************************************/
+
+void pix1000_device::fifo_push(uint16_t data)
+{
+	if (m_fifo_end >= PIX_FIFOSIZE) return;
+	m_fifo[m_fifo_end++] = data;
+}
+
+uint16_t pix1000_device::fifo_pop()
+{
+	uint16_t ret = 0;
+	if (m_fifo_pos < m_fifo_end) ret = m_fifo[m_fifo_pos++];
+	if (m_fifo_pos == m_fifo_end) {
+		m_fifo_pos = 0;
+		m_fifo_end = 0;
+	}
+	return ret;
 }

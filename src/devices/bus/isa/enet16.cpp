@@ -190,7 +190,7 @@ uint8_t enet16_device::snic_mem_r(offs_t offset)
 
 void enet16_device::snic_mem_w(offs_t offset, uint8_t data)
 {
-	if((offset < 0x8000) || (offset >= 0xC000)) return;
+	if(offset >= 0x4000) return;
 	m_ram[offset & 0x3fff] = data;
 }
 

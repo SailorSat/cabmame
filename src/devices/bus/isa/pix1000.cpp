@@ -137,7 +137,6 @@ void pix1000_device::isa_proc_w(offs_t offset, uint8_t data)
 			m_proc_reg2 = data;
 			return;
 		case 3:
-			map_ram(); // dirty hack to keep memory mapping active
 			m_proc_reg3 = data;
 			return;
 		case 4:
@@ -165,14 +164,28 @@ void pix1000_device::isa_fifo_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 uint8_t pix1000_device::isa_mem_r(offs_t offset)
 {
 	uint32_t address = (m_proc_reg1 << 24) | (m_proc_reg2 << 16) | ( offset & 0xffff );
+	if (m_proc_reg0 & 0x10) {
+		if (address < 0x00800000) {
+			if ((address == 0x00002101) | (address == 0x00002103))
+				return 0x13;
+			return m_pix_dram[address];
+		}
+	}
+
 	logerror("pix1000: unhandled mem read @ %02x / %08x\n", offset, address);
 	return 0xff;
 }
 
 void pix1000_device::isa_mem_w(offs_t offset, uint8_t data)
 {
-	if (offset == 0) map_ram(); // dirty hack to keep memory mapping active
 	uint32_t address = (m_proc_reg1 << 24) | (m_proc_reg2 << 16) | ( offset & 0xffff );
+	if (m_proc_reg0 & 0x10){
+		if (address < 0x00800000) {
+			m_pix_dram[address] = data;
+			return;
+		}
+	}
+
 	logerror("pix1000: unhandled mem write @ %02x / %08x, %02x\n", offset, address, data);
 }
 

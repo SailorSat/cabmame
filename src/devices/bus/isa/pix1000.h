@@ -10,6 +10,7 @@
 
 #define PIX_CLOCK       XTAL(40'000'000)
 #define PIX_FIFOSIZE    2048
+#define PIX_DRAMSIZE    8*1024*1024
 
 class pix1000_device: public device_t,
 						public device_isa16_card_interface
@@ -41,6 +42,8 @@ private:
 
 	//required_device<mc88100_device> m_m88110a;
 	//required_device<mc88100_device> m_m88110b;
+
+	uint8_t m_pix_dram[PIX_DRAMSIZE];
 
 	uint32_t m88110a_r(offs_t offset, uint32_t mem_mask);
 	void m88110a_w(offs_t offset, uint32_t data, uint32_t mem_mask);

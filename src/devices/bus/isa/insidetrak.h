@@ -37,11 +37,11 @@ private:
 	required_device<tms32031_device> m_tms32031;
 	uint8_t m_ram[4*32*1024];
 
-	uint16_t m_010001;
-	uint32_t tms32031_010001_r(offs_t offset);
-	void tms32031_010001_w(offs_t offset, uint32_t data, uint32_t mem_mask);
+	uint32_t m_010001;
+	uint32_t tms32031_01000x_r(offs_t offset, uint32_t mem_mask);
+	void tms32031_01000x_w(offs_t offset, uint32_t data, uint32_t mem_mask);
 
-	uint32_t tms32031_io_r(offs_t offset);
+	uint32_t tms32031_io_r(offs_t offset, uint32_t mem_mask);
 	void tms32031_io_w(offs_t offset, uint32_t data, uint32_t mem_mask);
 
 	uint16_t m_recv_fifo[INSIDETRAK_FIFOSIZE];

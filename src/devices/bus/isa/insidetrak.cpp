@@ -5,16 +5,19 @@
 Polhemus InsideTrak
 
 Todo:
-  add fifo logic
+  hook up TMS32031 XF1 as input
   add tms32031 dma, timers, serial etc.
-  figure out tms32031 io 010000 area
-  add irqs (not used by su2000/3000)
+  hook tms32031 to fifos
+  add isa-irqs (not used by su2000/3000)
   hook to model1 for netmerc
 
 Notes:
   1x TMS320C31PQL  - DSP
   4x MT5C2568DJ-25 - MICRON SRAM 32Kx8 / 25ns
   3x MS7201AL-80FC - MOSEL FIFO 512x9 / 80ns
+
+  1x DSP56ADC16    - Motorola 16-bit ADC
+  1x AD7840        - Analog Devices 14-bit DAC
   
   OSC1 33.3MHz
   OSC2 10.0MHz
@@ -166,34 +169,48 @@ void insidetrak_device::isa_port_w(offs_t offset, uint16_t data, uint16_t mem_ma
 void insidetrak_device::tms32031_map(address_map &map)
 {
 	map(0x000000, 0x00ffff).rom().region("tracker", 0);
-	map(0x010001, 0x010001).rw(FUNC(insidetrak_device::tms32031_010001_r), FUNC(insidetrak_device::tms32031_010001_w));
+	map(0x010000, 0x01000f).rw(FUNC(insidetrak_device::tms32031_01000x_r), FUNC(insidetrak_device::tms32031_01000x_w));
 	map(0x020000, 0x027fff).ram();
 	map(0x808000, 0x8080ff).rw(FUNC(insidetrak_device::tms32031_io_r), FUNC(insidetrak_device::tms32031_io_w));
 }
 
-uint32_t insidetrak_device::tms32031_010001_r(offs_t offset)
+/*
+  010000 ? (gets read)
+  010001 may be fifo status (r), and fifo data (w)
+  010002 ? (0 written)
+*/
+uint32_t insidetrak_device::tms32031_01000x_r(offs_t offset, uint32_t mem_mask)
 {
-	logerror("insidetrak: unhandled tms32031 010001 read %04x\n", offset);
-	return m_010001;
+	logerror("insidetrak: unhandled tms32031 01000x read %08X:%08X\n", offset, mem_mask);
+	switch (offset) {
+		case 1:
+			return m_010001;
+			break;
+	}
+	return 0;
 }
 
-void insidetrak_device::tms32031_010001_w(offs_t offset, uint32_t data, uint32_t mem_mask)
+void insidetrak_device::tms32031_01000x_w(offs_t offset, uint32_t data, uint32_t mem_mask)
 {
-	logerror("insidetrak: unhandled tms32031 010001 write %08X, %08X\n", offset, data);
-	if (data == 0x31) m_010001 = 0x0020; // prevent tms32031 from eating up all cpu cycles (for now);
+	logerror("insidetrak: unhandled tms32031 01000x write %08X:%08X, %08X\n", offset, mem_mask, data);
+	switch (offset) {
+		case 1:
+			if (data == 0x31) m_010001 = 0x20; // prevent tms32031 from eating up all cpu cycles (for now);
+			break;
+	}
 	return;
 }
 
-uint32_t insidetrak_device::tms32031_io_r(offs_t offset)
+uint32_t insidetrak_device::tms32031_io_r(offs_t offset, uint32_t mem_mask)
 {
-	logerror("insidetrak: unhandled tms32031 io read %04x\n", offset);
+	logerror("insidetrak: unhandled tms32031 io read %08X:%08X\n", offset, mem_mask);
 	if (offset == 0x30) return 0x0008; // prevent tms32031 from eating up all cpu cycles (for now);
 	return 0;
 }
 
 void insidetrak_device::tms32031_io_w(offs_t offset, uint32_t data, uint32_t mem_mask)
 {
-	logerror("insidetrak: unhandled tms32031 io write %08X, %08X\n", offset, data);
+	logerror("insidetrak: unhandled tms32031 io write %08X:%08X %08X\n", offset, mem_mask, data);
 	return;
 }
 

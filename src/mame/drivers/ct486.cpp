@@ -175,6 +175,7 @@ void ct486_state::ct486(machine_config &config)
 	ISA16_SLOT(config, "isa3", 0, "isabus", pc_isa16_cards, nullptr, false);
 	ISA16_SLOT(config, "isa4", 0, "isabus", pc_isa16_cards, nullptr, false);
 	ISA16_SLOT(config, "isa5", 0, "isabus", pc_isa16_cards, nullptr, false);
+	ISA16_SLOT(config, "isa6", 0, "isabus", pc_isa16_cards, nullptr, false);
 
 	// sound hardware
 	SPEAKER(config, "mono").front_center();

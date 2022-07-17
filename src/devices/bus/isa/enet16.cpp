@@ -13,7 +13,7 @@ Notes:
   1x EN90295-179  - custom compex asic
   1x DP83901AV    - Serial Network Interface Controller (SNIC)
   2x HY6264ALJ-70 - HYUNDAI SRAM 8Kx8 / 70ns
-  1x DM74S288AN   - 256-Bit TTL PROM (32 x 8)
+  1x DM74S288AN   - 256-Bit TTL PROM (32 x 8) containing the MAC address
 
   SU2000: jumpered to IRQ 5, I/O 0x280, MEM 0xC8000, "WDPLUS" mode
   SU3000: jumpered to IRQ 3, I/O 0x280, MEM 0xCC000, "WDPLUS" mode
@@ -184,13 +184,11 @@ WRITE_LINE_MEMBER(enet16_device::snic_irq_w)
 
 uint8_t enet16_device::snic_mem_r(offs_t offset)
 {
-	if((offset < 0x8000) || (offset >= 0xC000)) return 0xff;
 	return m_ram[offset & 0x3fff];
 }
 
 void enet16_device::snic_mem_w(offs_t offset, uint8_t data)
 {
-	if(offset >= 0x4000) return;
 	m_ram[offset & 0x3fff] = data;
 }
 

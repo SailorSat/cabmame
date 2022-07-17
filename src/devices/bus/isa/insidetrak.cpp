@@ -9,7 +9,6 @@ Todo:
   add tms32031 dma, timers, serial etc.
   hook tms32031 to fifos
   add isa-irqs (not used by su2000/3000)
-  hook to model1 for netmerc
 
 Notes:
   1x TMS320C31PQL  - DSP
@@ -97,6 +96,11 @@ void insidetrak_device::device_reset()
 	map_io();
 
 	m_010001 = 0 ;
+
+	m_recv_fifo_pos = 0;
+	m_recv_fifo_end = 0;
+	m_xmit_fifo_pos = 0;
+	m_xmit_fifo_end = 0;
 }
 
 /*************************************************************
@@ -126,11 +130,11 @@ uint16_t insidetrak_device::isa_port_r(offs_t offset, uint16_t mem_mask) {
 	if ((mem_mask == 0xff00) && (offset == 0)) {
 		// 8bit read @ 1 = read fifo status
 		// b0 = recv fifo; 0 empty, 1 data
-		// b1 = xmit fifo; 0 full, 1 free (not implemented yet)
+		// b1 = xmit fifo; 0 full, 1 free
 		uint8_t ret = 0xFC;
-		if (m_recv_fifo_end == 0) ret |= 1;
+		if (m_recv_fifo_end > 0) ret |= 1;
 		if (m_xmit_fifo_end < INSIDETRAK_FIFOSIZE) ret |= 2;
-		return ret << 16;
+		return ret << 8;
 	}
 	logerror("insidetrak: unhandled isa port read %04X @ %04X\n", offset, mem_mask);
 	return 0xffff;

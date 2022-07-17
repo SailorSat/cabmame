@@ -74,6 +74,7 @@
 #include "eis_twib.h"
 #include "np600.h"
 #include "3xtwin.h"
+#include "enet16.h"
 
 // communication ports
 #include "lpt.h"
@@ -86,6 +87,10 @@
 #include "finalchs.h"
 #include "bblue2.h"
 #include "opus100pm.h"
+#include "insidetrak.h"
+#include "formatc.h"
+#include "vid1000.h"
+#include "pix1000.h"
 
 
 void pc_isa8_cards(device_slot_interface &device)
@@ -235,4 +240,9 @@ void pc_isa16_cards(device_slot_interface &device)
 	device.option_add("dc820b", TEKRAM_DC820B); // actually an EISA card
 	device.option_add("omti8621", ISA16_OMTI8621);
 	device.option_add("lrk331", LRK331);
+	device.option_add("enet16", ISA16_ENET16);
+	device.option_add("insidetrak", ISA16_INSIDETRAK);
+	device.option_add("formatc", ISA16_FORMATC);
+	device.option_add("vid1000", ISA16_VID1000);
+	device.option_add("pix1000", ISA16_PIX1000);
 }

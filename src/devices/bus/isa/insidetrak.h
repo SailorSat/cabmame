@@ -7,9 +7,10 @@
 
 #include "isa.h"
 #include "cpu/tms32031/tms32031.h"
+#include "machine/timer.h"
 
-#define INSIDETRAK_CLOCK1   XTAL(33'333'000)
-#define INSIDETRAK_CLOCK2   XTAL(10'000'000)
+#define INSIDETRAK_CLOCK_33 XTAL(33'333'000)
+#define INSIDETRAK_CLOCK_10 XTAL(10'000'000)
 #define INSIDETRAK_FIFOSIZE 512
 
 class insidetrak_device: public device_t,
@@ -34,31 +35,67 @@ protected:
 private:
 	void map_io();
 
+	void isa_irq_w(int state);
+	int m_isa_irq;
+
 	required_device<tms32031_device> m_tms32031;
-	uint8_t m_ram[4*32*1024];
 
-	uint32_t m_010001;
-	uint32_t tms32031_01000x_r(offs_t offset, uint32_t mem_mask);
-	void tms32031_01000x_w(offs_t offset, uint32_t data, uint32_t mem_mask);
+	attotime m_tms32031_h1_clock_period;
+	uint32_t m_tms32031_int_regs[0x100];
 
-	uint32_t tms32031_io_r(offs_t offset, uint32_t mem_mask);
-	void tms32031_io_w(offs_t offset, uint32_t data, uint32_t mem_mask);
+	required_device_array<timer_device, 2> m_tms32031_timer;
+	TIMER_DEVICE_CALLBACK_MEMBER( tms32031_timer_callback );
+
+	required_device<timer_device> m_tms32031_dma_timer;
+	TIMER_DEVICE_CALLBACK_MEMBER( tms32031_dma_timer_callback );
+
+	uint8_t m_tms32031_timer_enabled[2];
+	void update_tms32031_timer(int which);
+
+	uint8_t m_tms32031_dma_enabled;
+	uint8_t m_tms32031_dma_timer_enabled;
+	void update_tms32031_dma();
+
+	required_device<timer_device> m_xf0_timer;
+	TIMER_DEVICE_CALLBACK_MEMBER( xf0_timer_callback );
+
+	required_device<timer_device> m_tclk1_timer;
+	TIMER_DEVICE_CALLBACK_MEMBER( tclk1_timer_callback );
+
+	uint32_t tms32031_ext_r(offs_t offset, uint32_t mem_mask);
+	void tms32031_ext_w(offs_t offset, uint32_t data, uint32_t mem_mask);
+
+	uint32_t tms32031_int_r(offs_t offset, uint32_t mem_mask);
+	void tms32031_int_w(offs_t offset, uint32_t data, uint32_t mem_mask);
+
+	uint8_t status_r();
+	void control_w(uint8_t data);
+	uint8_t m_control;
+
+	void update_xf1();
+
+	uint16_t m_ad7840;
+
+	uint8_t m_adc_sens;
+	uint8_t m_adc_recv;
+	uint8_t m_adc_xmit;
+	uint8_t m_adc_sync;
 
 	uint16_t m_recv_fifo[INSIDETRAK_FIFOSIZE];
-	uint8_t m_recv_fifo_pos;
-	uint8_t m_recv_fifo_end;
+	uint16_t m_recv_fifo_pos;
+	uint16_t m_recv_fifo_end;
 
 	void recv_fifo_push(uint16_t data);
 	uint16_t recv_fifo_pop();
 	uint16_t recv_fifo_depth() const { return m_recv_fifo_end - m_recv_fifo_pos; }
 
 	uint8_t m_xmit_fifo[INSIDETRAK_FIFOSIZE];
-	uint8_t m_xmit_fifo_pos;
-	uint8_t m_xmit_fifo_end;
+	uint16_t m_xmit_fifo_pos;
+	uint16_t m_xmit_fifo_end;
 
 	void xmit_fifo_push(uint8_t data);
 	uint8_t xmit_fifo_pop();
-	uint8_t xmit_fifo_depth() const { return m_xmit_fifo_end - m_xmit_fifo_pos; }
+	uint16_t xmit_fifo_depth() const { return m_xmit_fifo_end - m_xmit_fifo_pos; }
 };
 
 DECLARE_DEVICE_TYPE(ISA16_INSIDETRAK, insidetrak_device)

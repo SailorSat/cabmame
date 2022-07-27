@@ -4036,6 +4036,18 @@ end
 
 ---------------------------------------------------
 --
+--@src/devices/machine/mcd.h,MACHINES["MCD"] = true
+---------------------------------------------------
+
+if (MACHINES["MCD"]~=null) then
+	files {
+		MAME_DIR .. "src/devices/machine/mcd.cpp",
+		MAME_DIR .. "src/devices/machine/mcd.h",
+	}
+end
+
+---------------------------------------------------
+--
 --@src/devices/machine/dp83932c.h,MACHINES["DP83932C"] = true
 ---------------------------------------------------
 

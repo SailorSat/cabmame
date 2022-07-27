@@ -7,8 +7,7 @@
 
 #include "isa.h"
 
-class vid1000_device: public device_t,
-						public device_isa16_card_interface
+class vid1000_device: public device_t, public device_isa16_card_interface
 {
 public:
 	vid1000_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock);

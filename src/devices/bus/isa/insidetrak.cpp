@@ -450,7 +450,7 @@ void insidetrak_device::control_w(uint8_t data)
 			logerror("insidetrak: unhandled transmitter selection = %02X\n", m_control & 0x38);
 	}
 
-	logerror("insidetrak: m_control = %02X, sens = %u, recv = %u, xmit = %u, sync = %u\n", m_control, m_adc_sens, m_adc_recv, m_adc_xmit, m_adc_sync);
+	//logerror("insidetrak: m_control = %02X, sens = %u, recv = %u, xmit = %u, sync = %u\n", m_control, m_adc_sens, m_adc_recv, m_adc_xmit, m_adc_sync);
 }
 
 void insidetrak_device::update_xf1()

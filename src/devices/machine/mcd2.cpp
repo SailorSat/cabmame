@@ -78,11 +78,11 @@ bool mcd2_device::read_sector(bool first)
 	uint32_t lba = cdrom_file::msf_to_lba(m_readmsf);
 	if(m_drvmode == DRV_MODE_CDDA)
 	{
-		if(m_cdrom_handle->get_track_type(m_cdrom_handle->get_track(lba)) == cdrom_file::CD_TRACK_AUDIO)
+		if(m_cdrom_handle->get_track_type(m_cdrom_handle->get_track(lba - 150)) == cdrom_file::CD_TRACK_AUDIO)
 		{
 			m_cdda->stop_audio();
 			m_cdda->set_cdrom(m_cdrom_handle);
-			m_cdda->start_audio(lba, m_readcount);
+			m_cdda->start_audio(lba -150, m_readcount);
 			return true;
 		}
 		else
@@ -395,7 +395,7 @@ void mcd2_device::cmd_w(uint8_t data)
 				else
 				{
 					// none toc; note - we are offset by 150
-					uint32_t absolute = m_readmsf - 1;
+					uint32_t absolute = m_readmsf;
 					uint32_t lba = cdrom_file::msf_to_lba(absolute) - 150;
 					int cur_track = m_cdrom_handle->get_track(lba);
 					uint32_t start = m_cdrom_handle->get_track_start(cur_track);

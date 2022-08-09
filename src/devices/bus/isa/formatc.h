@@ -11,8 +11,9 @@
 #include "machine/mcd2.h"
 #include "cpu/mcs96/i8x9x.h"
 
-#define FMTC_SSCAPE_CLOCK1   XTAL(14'318'181)
-#define FMTC_SSCAPE_CLOCK2   XTAL(10'000'000)
+#define FMTC_SSCAPE_CLOCK1   XTAL(32'000'000)
+#define FMTC_SSCAPE_CLOCK2   XTAL(14'318'181)
+#define FMTC_SSCAPE_CLOCK3   XTAL(10'000'000)
 #define FMTC_CONTROL_CLOCK   XTAL(8'000'000)
 
 
@@ -40,14 +41,28 @@ protected:
 	virtual ioport_constructor device_input_ports() const override;
 	virtual const tiny_rom_entry *device_rom_region() const override;
 
+	uint8_t dack_r(int line) override;
+	void dack_w(int line, uint8_t data) override;
+	void eop_w(int state) override;
+
 private:
 	void map_io();
+	void map_dma();
 	void map_ram();
 
 	uint8_t sscape_otto_r(offs_t offset);
 	void sscape_otto_w(offs_t offset, uint8_t data);
 	uint8_t sscape_odie_r(offs_t offset);
 	void sscape_odie_w(offs_t offset, uint8_t data);
+
+	void trigger_odie_dma(int which);
+	void update_odie_dma(int which);
+	uint8_t m_odie_dma_enabled[2];
+	uint8_t m_odie_dma_channel[2];
+
+	void drq_w(int state, int source);
+	void irq_w(int state);
+	uint8_t m_eop;
 
 	uint8_t ctrl_mem_r(offs_t offset);
 	void ctrl_mem_w(offs_t offset, uint8_t data);

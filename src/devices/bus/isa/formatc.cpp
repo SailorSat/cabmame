@@ -102,6 +102,11 @@ static INPUT_PORTS_START( formatc )
 	PORT_CONFSETTING( 0x00, "330")
 	PORT_CONFSETTING( 0x01, "350")
 
+	PORT_START("FORMATC_IRQ_ODIE")
+	PORT_CONFNAME(0x01, 0x00, "FORMAT-C ODIE IRQ")
+	PORT_CONFSETTING( 0x00, "IRQ 12")
+	PORT_CONFSETTING( 0x01, "IRQ 15")
+
 	PORT_START("FORMATC_IO_CTRL")
 	PORT_CONFNAME(0x01, 0x00, "FORMAT-C CTRL I/O")
 	PORT_CONFSETTING( 0x00, "210")
@@ -139,7 +144,7 @@ DEFINE_DEVICE_TYPE(ISA16_FORMATC, formatc_device, "formatc", "Virtuality FORMAT 
 
 void formatc_device::device_add_mconfig(machine_config &config)
 {
-	M68000(config, m_m68000, FMTC_SSCAPE_CLOCK1 / 2);
+	M68000(config, m_m68000, FMTC_SSCAPE_CLOCK1 / 4);
 	m_m68000->set_addrmap(AS_PROGRAM, &formatc_device::sscape_map);
 
 	SPEAKER(config, "lspeaker").front_left();
@@ -179,8 +184,18 @@ void formatc_device::device_reset()
 {
 	map_io();
 	map_ram();
+	map_dma();
 
 	m_odie_page = 0;
+	memset(m_odie_regs, 0, 0x30);
+
+	m_isa->drq1_w(CLEAR_LINE);
+	m_isa->drq3_w(CLEAR_LINE);
+
+	m_odie_dma_enabled[0] = 0;
+	m_odie_dma_enabled[1] = 0;
+	m_odie_dma_channel[0] = 0;
+	m_odie_dma_channel[1] = 0;
 }
 
 void formatc_device::device_reset_after_children()
@@ -229,6 +244,54 @@ void formatc_device::map_ram()
 			break;
 		case 1:
 			m_isa->install_memory(0xe0800, 0xe0fff, read8sm_delegate(*this, FUNC(formatc_device::isa_mem_r)), write8sm_delegate(*this, FUNC(formatc_device::isa_mem_w)));
+			break;
+	}
+}
+
+void formatc_device::map_dma()
+{
+	m_isa->set_dma_channel(1, this, true);
+	m_isa->set_dma_channel(3, this, true);
+}
+
+uint8_t formatc_device::dack_r(int line)
+{
+	// todo
+	logerror("formatc: ISA - unhandled DMA read @ %02x\n", line);
+	return 0xff;
+}
+
+void formatc_device::dack_w(int line, uint8_t data)
+{
+	// todo
+	if (m_eop == 1) {
+		m_isa->drq3_w(CLEAR_LINE);
+		m_odie_regs[HOST_DMAA_TRIG_STAT] |= 0x01;
+	}
+	logerror("formatc: ISA - unhandled DMA write @ %02x : %02x\n", line, data);
+}
+
+void formatc_device::eop_w(int state)
+{
+	m_eop = state;
+}
+
+void formatc_device::drq_w(int state, int source)
+{
+	// todo
+	// m_isa->drq1_w(state);
+	// m_isa->drq3_w(state);
+}
+
+void formatc_device::irq_w(int state)
+{
+	uint8_t mem_base = ioport("FORMATC_IRQ_ODIE")->read() & 0x1;
+	switch (mem_base) {
+		case 0:
+			m_isa->irq12_w(state);
+			break;
+		case 1:
+			m_isa->irq15_w(state);
 			break;
 	}
 }
@@ -369,8 +432,33 @@ uint8_t formatc_device::odie_reg_r(offs_t offset)
 
 void formatc_device::odie_reg_w(offs_t offset, uint8_t data)
 {
-	logerror("formatc: ODIE register write %02x = %02x\n", offset, data);
+	uint8_t changed = m_odie_regs[offset] ^ data;
 	m_odie_regs[offset] = data;
+
+	switch (offset) {
+		case HOST_DMAA_TRIG_STAT:
+		case HOST_DMAB_TRIG_STAT:
+			if ((changed == 0x01) && ((m_odie_regs[offset] & 0x01) == 0)
+				trigger_odie_dma(offset & 1);
+			break;
+
+		case HOST_MASTER_CTRL:
+			if ((data & 0xc0) == 0x80) {
+				m_odie_regs[HOST_DMAA_TRIG_STAT] |= 0x04;
+				m_odie_regs[HOST_DMAB_TRIG_STAT] |= 0x04;
+			}
+	}
+	logerror("formatc: ODIE register write %02x = %02x\n", offset, data);
+}
+
+void formatc_device::update_odie_dma(int which)
+{
+	m_isa->drq3_w(ASSERT_LINE); // fix me
+}
+
+void formatc_device::update_odie_dma(int which)
+{
+	
 }
 
 /*************************************************************

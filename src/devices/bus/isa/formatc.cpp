@@ -85,7 +85,7 @@ Notes:
 #define HOST_INT_STAT           0x20
 #define HOST_INT_ENAB           0x21
 #define HOST_DMAA_TRIG_STAT     0x22
-#define HOST DMAB_TRIG_STAT     0x23
+#define HOST_DMAB_TRIG_STAT     0x23
 #define HOST_INT_IF_CONF        0x24
 #define HOST_DMA_IF_CONF        0x25
 #define HOST_CDR_IF_CONF        0x26
@@ -192,10 +192,11 @@ void formatc_device::device_reset()
 	m_isa->drq1_w(CLEAR_LINE);
 	m_isa->drq3_w(CLEAR_LINE);
 
-	m_odie_dma_enabled[0] = 0;
-	m_odie_dma_enabled[1] = 0;
 	m_odie_dma_channel[0] = 0;
 	m_odie_dma_channel[1] = 0;
+
+	m_odie_dma_address[0] = 0;
+	m_odie_dma_address[1] = 0;
 }
 
 void formatc_device::device_reset_after_children()
@@ -264,11 +265,49 @@ uint8_t formatc_device::dack_r(int line)
 void formatc_device::dack_w(int line, uint8_t data)
 {
 	// todo
-	if (m_eop == 1) {
-		m_isa->drq3_w(CLEAR_LINE);
-		m_odie_regs[HOST_DMAA_TRIG_STAT] |= 0x01;
+	int which = -1;
+
+	if (m_odie_dma_channel[0] == line)
+		which = 0;
+	if (m_odie_dma_channel[1] == line)
+		which = 1;
+
+	if (which == -1) {
+		logerror("formatc: ISA - unhandled DMA %u write : %02x\n", line, data);
+		return;
 	}
-	logerror("formatc: ISA - unhandled DMA write @ %02x : %02x\n", line, data);
+
+	if (m_eop == 1) {
+		m_odie_regs[HOST_DMAA_TRIG_STAT + which] |= 0x01;
+		switch (line) {
+			case 0:
+				// should not happen on 8-bit dma?
+				m_isa->drq0_w(CLEAR_LINE);
+				break;
+			case 1:
+				m_isa->drq1_w(CLEAR_LINE);
+				break;
+			case 3:
+				m_isa->drq3_w(CLEAR_LINE);
+				break;
+			case 5:
+				// should not happen on 8-bit dma?
+				m_isa->drq5_w(CLEAR_LINE);
+				break;
+			case 6:
+				// should not happen on 8-bit dma?
+				m_isa->drq6_w(CLEAR_LINE);
+				break;
+			case 7:
+				// should not happen on 8-bit dma?
+				m_isa->drq7_w(CLEAR_LINE);
+				break;
+		}
+	}
+
+	// TODO - write data to actual sscape memory
+	logerror("formatc: ISA - handled DMA %u write @ %06x : %02x\n", line, m_odie_dma_address[which], data);
+	m_odie_dma_address[which]++;
 }
 
 void formatc_device::eop_w(int state)
@@ -329,8 +368,7 @@ uint8_t formatc_device::isa_odie_r(offs_t offset)
 	// CD-ROM Interface Mode-1 - +8 to +15
 	// CD-ROM Interface Mode-2 - +16 to +31
 	// CD-ROM Interface Mode-3 - +16 to +47
-	uint8_t cdmode = (m_odie_regs[HOST_MASTER_CTRL] >> 4) & 0x3;
-	if ((cdmode == 1) && (offset & 8)) {
+	if ((m_odie_cd_mode == 1) && (offset & 8)) {
 		return mcd_r(offset & 3);
 	}
 
@@ -371,8 +409,7 @@ void formatc_device::isa_odie_w(offs_t offset, uint8_t data)
 	// CD-ROM Interface Mode-1 - +8 to +15
 	// CD-ROM Interface Mode-2 - +16 to +31
 	// CD-ROM Interface Mode-3 - +16 to +47
-	uint8_t cdmode = (m_odie_regs[HOST_MASTER_CTRL] >> 4) & 0x3;
-	if ((cdmode == 1) && (offset & 8)) {
+	if ((m_odie_cd_mode == 1) && (offset & 8)) {
 		mcd_w(offset & 3, data);
 		return;
 	}
@@ -415,6 +452,9 @@ uint8_t formatc_device::odie_reg_r(offs_t offset)
 	uint8_t result = m_odie_regs[offset];
 
 	switch (offset) {
+		case OBP_MISC_STAT:
+			result = m_odie_regs[MEM_CONFIG_A] & 0x7f;
+			break;
 		//case 0x24: // 
 
 		case 0x2c:
@@ -436,29 +476,89 @@ void formatc_device::odie_reg_w(offs_t offset, uint8_t data)
 	m_odie_regs[offset] = data;
 
 	switch (offset) {
+		case OBP_MISC_STAT:
+		case HOST_INT_STAT:
+			// read only register
+			return;
+
 		case HOST_DMAA_TRIG_STAT:
 		case HOST_DMAB_TRIG_STAT:
-			if ((changed == 0x01) && ((m_odie_regs[offset] & 0x01) == 0)
+			if ((changed == 0x01) && ((data & 0x01) == 0))
 				trigger_odie_dma(offset & 1);
 			break;
 
 		case HOST_MASTER_CTRL:
-			if ((data & 0xc0) == 0x80) {
-				m_odie_regs[HOST_DMAA_TRIG_STAT] |= 0x04;
-				m_odie_regs[HOST_DMAB_TRIG_STAT] |= 0x04;
-			}
+			update_odie_mode();
+			break;
 	}
+
 	logerror("formatc: ODIE register write %02x = %02x\n", offset, data);
 }
 
-void formatc_device::update_odie_dma(int which)
+void formatc_device::trigger_odie_dma(int which)
 {
-	m_isa->drq3_w(ASSERT_LINE); // fix me
+	m_odie_dma_channel[which] = (m_odie_regs[HOST_DMAA_TRIG_STAT + which] >> 4) & 0x7;
+	switch (m_odie_dma_channel[which]) {
+		case 0:
+			m_isa->drq0_w(ASSERT_LINE);
+			break;
+		case 1:
+			m_isa->drq1_w(ASSERT_LINE);
+			break;
+		case 3:
+			m_isa->drq3_w(ASSERT_LINE);
+			break;
+		case 5:
+			m_isa->drq5_w(ASSERT_LINE);
+			break;
+		case 6:
+			m_isa->drq6_w(ASSERT_LINE);
+			break;
+		case 7:
+			m_isa->drq7_w(ASSERT_LINE);
+			break;
+		case 2:
+		case 4:
+			// dma disabled
+			logerror("formatc: ODIE disabled dma got triggered.\n");
+	}
 }
 
 void formatc_device::update_odie_dma(int which)
 {
-	
+	//m_odie_dma_address[which] = (m_odie_regs[DMAA_ADDR_2 + (which * 6)] << 16) | (m_odie_regs[DMAA_ADDR_1 + (which * 6)] << 8) | (m_odie_regs[DMAA_ADDR_0 + (which * 6)]);
+}
+
+void formatc_device::update_odie_mode()
+{
+	m_odie_cd_mode = (m_odie_regs[HOST_MASTER_CTRL] >> 4) & 0x3;
+
+	uint8_t mode = (m_odie_regs[HOST_MASTER_CTRL] >> 6) & 0x3;
+	if (m_odie_obp_mode != mode) {
+		m_odie_obp_mode = mode;
+		switch (m_odie_obp_mode) {
+			case 0:
+				// subsystem reset
+				//m_m68000->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
+				break;
+			case 1:
+				// normal operation
+				//m_m68000->set_input_line(INPUT_LINE_RESET, CLEAR_LINE);
+				break;
+			case 2:
+				// code download mode
+				//m_m68000->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
+				m_odie_regs[HOST_DMAA_TRIG_STAT] |= 0x04;
+				m_odie_regs[HOST_DMAB_TRIG_STAT] |= 0x04;
+				m_odie_dma_address[0] = 0;
+				m_odie_dma_address[1] = 0;
+				break;
+			case 3:
+				// obp startup mode
+				//m_m68000->set_input_line(INPUT_LINE_RESET, CLEAR_LINE);
+				break;
+		}
+	}
 }
 
 /*************************************************************

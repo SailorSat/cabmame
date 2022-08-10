@@ -57,8 +57,12 @@ private:
 
 	void trigger_odie_dma(int which);
 	void update_odie_dma(int which);
-	uint8_t m_odie_dma_enabled[2];
 	uint8_t m_odie_dma_channel[2];
+	uint32_t m_odie_dma_address[2];
+
+	void update_odie_mode();
+	uint8_t m_odie_cd_mode;
+	uint8_t m_odie_obp_mode;
 
 	void drq_w(int state, int source);
 	void irq_w(int state);

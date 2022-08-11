@@ -50,6 +50,14 @@ private:
 	void map_dma();
 	void map_ram();
 
+	uint8_t m_sscape_ram0[2*64*1024];
+	uint8_t sscape_ram0_r(offs_t offset);
+	void sscape_ram0_w(offs_t offset, uint8_t data);
+	uint8_t sscape_ram1_r(offs_t offset);
+	void sscape_ram1_w(offs_t offset, uint8_t data);
+	uint8_t sscape_ram3_r(offs_t offset);
+	void sscape_ram3_w(offs_t offset, uint8_t data);
+
 	uint8_t sscape_otto_r(offs_t offset);
 	void sscape_otto_w(offs_t offset, uint8_t data);
 	uint8_t sscape_odie_r(offs_t offset);

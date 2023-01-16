@@ -65,8 +65,19 @@ private:
 	osd_file::ptr m_line_tx; // tx line - is differential, simple serial and toslink
 	char m_localhost[256]{};
 	char m_remotehost[256]{};
-	uint8_t m_buffer0[0x100]{};
-	uint8_t m_buffer1[0x100]{};
+	uint8_t m_buffer0[0x400]{};
+	uint8_t m_buffer1[0x400]{};
+
+	uint8_t m_linkenable = 0;
+	uint16_t m_linktimer = 0;
+	uint8_t m_linkalive = 0;
+	uint8_t m_linkid = 0;
+	uint8_t m_linkcount = 0;
+
+	void comm_tick();
+	int read_frame(int dataSize);
+	void send_data(uint8_t frameType, int frameOffset, int frameSize, int dataSize);
+	void send_frame(int dataSize);
 };
 
 // device type definition

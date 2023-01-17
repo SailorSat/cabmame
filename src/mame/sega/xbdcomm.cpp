@@ -48,7 +48,7 @@ void xbdcomm_device::xbdcomm_io(address_map &map)
 {
 	map.global_mask(0xff);
 	map(0x20, 0x27).w(FUNC(xbdcomm_device::dma_reg_w));
-	map(0x40, 0x40).r(FUNC(xbdcomm_device::z80_stat_r));
+	map(0x40, 0x40).rw(FUNC(xbdcomm_device::z80_stat_r), FUNC(xbdcomm_device::z80_debug_w));
 	map(0x80, 0x80).w(FUNC(xbdcomm_device::z80_stat_w));
 }
 
@@ -124,6 +124,9 @@ xbdcomm_device::xbdcomm_device(const machine_config &mconfig, const char *tag, d
 
 void xbdcomm_device::device_start()
 {
+	m_ex_page = 0;
+	m_xbd_stat = 0;
+	m_z80_stat = 0;
 }
 
 //-------------------------------------------------
@@ -132,10 +135,6 @@ void xbdcomm_device::device_start()
 
 void xbdcomm_device::device_reset()
 {
-	m_ex_page = 0;
-
-	m_xbd_stat = 0;
-	m_z80_stat = 0;
 }
 
 void xbdcomm_device::device_reset_after_children()
@@ -347,6 +346,12 @@ uint8_t xbdcomm_device::z80_stat_r()
 void xbdcomm_device::z80_stat_w(uint8_t data)
 {
 	m_z80_stat = data;
+}
+
+void xbdcomm_device::z80_debug_w(uint8_t data)
+{
+	m_ex_page = data;
+	m_z80_stat = 0;
 }
 
 void xbdcomm_device::comm_tick()

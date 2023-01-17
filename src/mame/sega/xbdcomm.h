@@ -5,7 +5,7 @@
 
 #pragma once
 
-#define XBDCOMM_SIMULATION
+#define XBDCOMM_SIMULATION_X
 
 #include "osdfile.h"
 #include "cpu/z80/z80.h"
@@ -60,6 +60,8 @@ private:
 
 	uint8_t z80_stat_r();
 	void z80_stat_w(uint8_t data);
+
+	void z80_debug_w(uint8_t data);
 
 	osd_file::ptr m_line_rx; // rx line - can be either differential, simple serial or toslink
 	osd_file::ptr m_line_tx; // tx line - is differential, simple serial and toslink

@@ -789,6 +789,16 @@ void segaybd_state::sound_portmap(address_map &map)
 //  LINK BOARD
 //**************************************************************************
 
+uint16_t segaybd_state::pdriftl_excs_r(offs_t offset)
+{
+	return 0xFF00 | m_ybdcomm->ex_r(offset);
+}
+
+void segaybd_state::pdriftl_excs_w(offs_t offset, uint16_t data, uint16_t mem_mask)
+{
+	m_ybdcomm->ex_w(offset, data & 0xff);
+}
+
 WRITE_LINE_MEMBER(segaybd_state::mb8421_intl)
 {
 	// shared ram interrupt request from linkcpu side
@@ -821,9 +831,7 @@ void segaybd_state::link2_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 void segaybd_state::main_map_link(address_map &map)
 {
 	main_map(map);
-	map(0x190000, 0x190fff).rw("mb8421", FUNC(mb8421_device::left_r), FUNC(mb8421_device::left_w)).umask16(0x00ff);
-	map(0x191000, 0x191001).r(FUNC(segaybd_state::link_r));
-	map(0x192000, 0x192001).rw(FUNC(segaybd_state::link2_r), FUNC(segaybd_state::link2_w));
+	map(0x190000, 0x193fff).rw(FUNC(segaybd_state::pdriftl_excs_r), FUNC(segaybd_state::pdriftl_excs_w));
 }
 
 
@@ -1490,13 +1498,7 @@ void segaybd_state::yboard_link(machine_config &config)
 	// basic machine hardware
 	m_maincpu->set_addrmap(AS_PROGRAM, &segaybd_state::main_map_link);
 
-	Z80(config, m_linkcpu, XTAL(16'000'000)/2); // 8 Mhz
-	m_linkcpu->set_addrmap(AS_PROGRAM, &segaybd_state::link_map);
-	m_linkcpu->set_addrmap(AS_IO, &segaybd_state::link_portmap);
-
-	mb8421_device &mb8421(MB8421(config, "mb8421"));
-	mb8421.intl_callback().set(FUNC(segaybd_state::mb8421_intl));
-	mb8421.intr_callback().set(FUNC(segaybd_state::mb8421_intr));
+	YBDCOMM(config, "ybdcomm", 0);
 }
 
 void segaybd_state::yboard_deluxe(machine_config &config)

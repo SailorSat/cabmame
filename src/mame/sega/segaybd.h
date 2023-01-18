@@ -15,6 +15,7 @@
 #include "machine/mb3773.h"
 #include "segaic16.h"
 #include "sega16sp.h"
+#include "ybdcomm.h"
 #include "screen.h"
 
 
@@ -36,6 +37,7 @@ public:
 		, m_bsprites(*this, "bsprites")
 		, m_ysprites(*this, "ysprites")
 		, m_segaic16vid(*this, "segaic16vid")
+		, m_ybdcomm(*this, "ybdcomm")
 		, m_adc_ports(*this, "ADC.%u", 0)
 		, m_pdrift_bank(0)
 		, m_scanline_timer(nullptr)
@@ -57,6 +59,9 @@ public:
 	void init_gforce2();
 	void init_rchase();
 	void init_gloc();
+
+	uint16_t pdriftl_excs_r(offs_t offset);
+	void pdriftl_excs_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
 
 private:
 	// main CPU read/write handlers
@@ -120,6 +125,7 @@ private:
 	required_device<sega_sys16b_sprite_device> m_bsprites;
 	required_device<sega_yboard_sprite_device> m_ysprites;
 	required_device<segaic16_video_device> m_segaic16vid;
+	optional_device<ybdcomm_device> m_ybdcomm;
 
 	// input ports
 	optional_ioport_array<6> m_adc_ports;

@@ -229,6 +229,7 @@ void ybdcomm_device::ex_w(offs_t offset, uint8_t data)
 	{
 		case 0:
 			m_dpram->right_w(offset, data);
+			comm_tick();
 			break;
 
 		case 1:
@@ -602,7 +603,8 @@ void ybdcomm_device::comm_tick()
 					}
 					else
 					{
-						m_z80_stat &= 0x7F;
+						//m_z80_stat &= 0x7F;
+						m_z80_stat = 0;
 					}
 				}
 
@@ -610,7 +612,7 @@ void ybdcomm_device::comm_tick()
 				recv = read_frame(dataSize);
 			}
 
-			m_z80_stat ^= 0x01;
+			//m_z80_stat ^= 0x01;
 
 			// update "ring buffer" if link established
 			// live relay does not send data
@@ -622,7 +624,12 @@ void ybdcomm_device::comm_tick()
 					frameOffset = comm_frameOffset(cabIdx);
 					frameSize = comm_frameSize(cabIdx);
 					send_data(cabIdx, frameOffset, frameSize, dataSize);
-					m_z80_stat |= 0x80;
+					//m_z80_stat |= 0x80;
+					m_z80_stat = 0x01;
+				}
+				else
+				{
+					m_z80_stat ^= 0x01;
 				}
 			}
 

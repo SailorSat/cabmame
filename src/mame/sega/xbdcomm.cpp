@@ -192,6 +192,9 @@ void xbdcomm_device::ex_w(offs_t offset, uint8_t data)
 		case 0x08:
 			// page latch
 			m_ex_page = data;
+#ifndef XBDCOMM_SIMULATION
+			comm_tick();
+#endif
 			break;
 
 		case 0x10:

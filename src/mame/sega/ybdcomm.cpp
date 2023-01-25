@@ -51,7 +51,7 @@ void ybdcomm_device::ybdcomm_mem(address_map &map)
 void ybdcomm_device::ybdcomm_io(address_map &map)
 {
 	map.global_mask(0xff);
-	map(0x20, 0x27).w(FUNC(ybdcomm_device::dma_reg_w));
+	map(0x00, 0x3f).rw(m_mpc, FUNC(mb89372_device::read), FUNC(mb89372_device::write));
 	map(0x40, 0x40).r(FUNC(ybdcomm_device::z80_stat_r));
 	map(0x80, 0x80).w(FUNC(ybdcomm_device::z80_stat_w));
 	map(0xc0, 0xc0).portr("Link_SW1");
@@ -124,6 +124,12 @@ void ybdcomm_device::device_add_mconfig(machine_config &config)
 	m_cpu->set_io_map(&ybdcomm_device::ybdcomm_io);
 
 	MB8421(config, m_dpram).intl_callback().set(FUNC(ybdcomm_device::dpram_int5_w));
+
+	MB89372(config, m_mpc, 8000000); // 16 MHz / 2
+	m_mpc->out_hreq_callback().set(FUNC(ybdcomm_device::mpc_hreq_w));
+	m_mpc->out_irq_callback().set(FUNC(ybdcomm_device::mpc_int7_w));
+	m_mpc->in_memr_callback().set(FUNC(ybdcomm_device::mpc_mem_r));
+	m_mpc->out_memw_callback().set(FUNC(ybdcomm_device::mpc_mem_w));
 }
 
 ioport_constructor ybdcomm_device::device_input_ports() const
@@ -150,8 +156,7 @@ ybdcomm_device::ybdcomm_device(const machine_config &mconfig, const char *tag, d
 	m_dpram(*this, "dpram"),
 	m_mpc(*this, "commmpc")
 {
-	std::fill(std::begin(m_dma_reg), std::end(m_dma_reg), 0);
-
+#ifdef YBDCOMM_SIMULATION
 	// prepare localhost "filename"
 	m_localhost[0] = 0;
 	strcat(m_localhost, "socket.");
@@ -165,6 +170,7 @@ ybdcomm_device::ybdcomm_device(const machine_config &mconfig, const char *tag, d
 	strcat(m_remotehost, mconfig.options().comm_remotehost());
 	strcat(m_remotehost, ":");
 	strcat(m_remotehost, mconfig.options().comm_remoteport());
+#endif
 }
 
 //-------------------------------------------------
@@ -176,8 +182,10 @@ void ybdcomm_device::device_start()
 	m_ybd_stat = 0;
 	m_z80_stat = 0;
 
+#ifdef YBDCOMM_SIMULATION
 	m_tick_timer = timer_alloc(FUNC(ybdcomm_device::tick_timer), this);
 	m_tick_timer->adjust(attotime::from_hz(600), 0, attotime::from_hz(600));
+#endif
 }
 
 //-------------------------------------------------
@@ -191,6 +199,7 @@ void ybdcomm_device::device_reset()
 void ybdcomm_device::device_reset_after_children()
 {
 	m_cpu->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
+	m_mpc->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
 }
 
 uint8_t ybdcomm_device::ex_r(offs_t offset)
@@ -240,17 +249,18 @@ void ybdcomm_device::ex_w(offs_t offset, uint8_t data)
 			// bit 1 = test flag?
 			// bit 0 = ready to send?
 			m_ybd_stat = data;
+			LOG("ybdcomm-ex_w: %02x %02x\n", offset, data);
 #ifndef YBDCOMM_SIMULATION
 			if (m_ybd_stat & 0x80)
 			{
 				m_cpu->set_input_line(INPUT_LINE_RESET, CLEAR_LINE);
+				m_mpc->set_input_line(INPUT_LINE_RESET, CLEAR_LINE);
 			}
 			else
 			{
 				device_reset();
 				device_reset_after_children();
 			}
-			LOG("ybdcomm-ex_w: %02x %02x\n", offset, data);
 #else
 			if (m_ybd_stat & 0x80)
 			{
@@ -267,8 +277,8 @@ void ybdcomm_device::ex_w(offs_t offset, uint8_t data)
 
 					// read dips and write to shared memory
 					uint8_t sw1 = ioport("Link_SW1")->read();
-					dma_mem_w(0x4000, sw1 & 0x0f);
-					dma_mem_w(0x4001, (sw1 >> 4) & 0x0f);
+					mpc_mem_w(0x4000, sw1 & 0x0f);
+					mpc_mem_w(0x4001, (sw1 >> 4) & 0x0f);
 				}
 			}
 			else
@@ -287,11 +297,10 @@ void ybdcomm_device::ex_w(offs_t offset, uint8_t data)
 	}
 }
 
-TIMER_CALLBACK_MEMBER(ybdcomm_device::tick_timer)
+WRITE_LINE_MEMBER(ybdcomm_device::mpc_hreq_w)
 {
-#ifdef YBDCOMM_SIMULATION
-	comm_tick();
-#endif
+	m_cpu->set_input_line(INPUT_LINE_HALT, state ? ASSERT_LINE : CLEAR_LINE);
+	m_mpc->hack_w(state);
 }
 
 WRITE_LINE_MEMBER(ybdcomm_device::dpram_int5_w)
@@ -299,9 +308,9 @@ WRITE_LINE_MEMBER(ybdcomm_device::dpram_int5_w)
 	m_cpu->set_input_line_and_vector(0, state ? ASSERT_LINE : CLEAR_LINE, 0xef); // Z80 INT5
 }
 
-WRITE_LINE_MEMBER(ybdcomm_device::dlc_int7_w)
+WRITE_LINE_MEMBER(ybdcomm_device::mpc_int7_w)
 {
-	logerror("dlc_int7_w: %02x\n", state);
+	logerror("mpc_int7_w: %02x\n", state);
 	m_cpu->set_input_line_and_vector(0, state ? ASSERT_LINE : CLEAR_LINE, 0xff); // Z80 INT7
 }
 
@@ -322,27 +331,27 @@ void ybdcomm_device::update_dma()
 
 		if (rx_dma_config && tx_dma_config)
 		{
-			int rx_size = (dma_mem_r(rx_dma_config + 1) << 8) | dma_mem_r(rx_dma_config);
-			int tx_size = (dma_mem_r(tx_dma_config + 1) << 8) | dma_mem_r(tx_dma_config);
+			int rx_size = (mpc_mem_r(rx_dma_config + 1) << 8) | mpc_mem_r(rx_dma_config);
+			int tx_size = (mpc_mem_r(tx_dma_config + 1) << 8) | mpc_mem_r(tx_dma_config);
 
 			if (rx_size == tx_size)
 			{
-				int rx_addr = (dma_mem_r(rx_dma_config + 4) << 16) | (dma_mem_r(rx_dma_config + 3) << 8) | dma_mem_r(rx_dma_config + 2);
-				int tx_addr = (dma_mem_r(tx_dma_config + 4) << 16) | (dma_mem_r(tx_dma_config + 3) << 8) | dma_mem_r(tx_dma_config + 2);
+				int rx_addr = (mpc_mem_r(rx_dma_config + 4) << 16) | (mpc_mem_r(rx_dma_config + 3) << 8) | mpc_mem_r(rx_dma_config + 2);
+				int tx_addr = (mpc_mem_r(tx_dma_config + 4) << 16) | (mpc_mem_r(tx_dma_config + 3) << 8) | mpc_mem_r(tx_dma_config + 2);
 
-				int rx_flag = dma_mem_r(rx_dma_config + 5);
-				int tx_flag = dma_mem_r(tx_dma_config + 5);
+				int rx_flag = mpc_mem_r(rx_dma_config + 5);
+				int tx_flag = mpc_mem_r(tx_dma_config + 5);
 
 				for (int i = 0 ; i < rx_size ; i++)
 				{
-					dma_mem_w(rx_addr + i, dma_mem_r(tx_addr + i));
+					mpc_mem_w(rx_addr + i, mpc_mem_r(tx_addr + i));
 				}
 
 				rx_flag |= 0x60;
 				tx_flag |= 0x60;
 
-				dma_mem_w(rx_dma_config + 5, rx_flag);
-				dma_mem_w(tx_dma_config + 5, tx_flag);
+				mpc_mem_w(rx_dma_config + 5, rx_flag);
+				mpc_mem_w(tx_dma_config + 5, tx_flag);
 				logerror("dma magic: size %04x from %04x to %04x\n", rx_size, tx_addr, rx_addr);
 
 				m_dma_reg[3] |= 0x01;
@@ -350,15 +359,15 @@ void ybdcomm_device::update_dma()
 
 				if (rx_flag & 0x10)
 				{
-					m_dma_reg[0x00] = dma_mem_r(rx_dma_config + 9);
-					m_dma_reg[0x01] = dma_mem_r(rx_dma_config + 10);
-					m_dma_reg[0x02] = dma_mem_r(rx_dma_config + 11);
+					m_dma_reg[0x00] = mpc_mem_r(rx_dma_config + 9);
+					m_dma_reg[0x01] = mpc_mem_r(rx_dma_config + 10);
+					m_dma_reg[0x02] = mpc_mem_r(rx_dma_config + 11);
 				}
 				if (tx_flag & 0x10)
 				{
-					m_dma_reg[0x04] = dma_mem_r(tx_dma_config + 9);
-					m_dma_reg[0x05] = dma_mem_r(tx_dma_config + 10);
-					m_dma_reg[0x06] = dma_mem_r(tx_dma_config + 11);
+					m_dma_reg[0x04] = mpc_mem_r(tx_dma_config + 9);
+					m_dma_reg[0x05] = mpc_mem_r(tx_dma_config + 10);
+					m_dma_reg[0x06] = mpc_mem_r(tx_dma_config + 11);
 				}
 
 				if ((rx_flag & 0x10) && (tx_flag & 0x10))
@@ -375,20 +384,20 @@ void ybdcomm_device::update_dma()
 
 	if ((m_dma_reg[3] & 0x01) || (m_dma_reg[7] & 0x01))
 	{
-		dlc_int7_w(1);
+		mpc_int7_w(1);
 	}
 	else
 	{
-		dlc_int7_w(0);
+		mpc_int7_w(0);
 	}
 }
 
-uint8_t ybdcomm_device::dma_mem_r(offs_t offset)
+uint8_t ybdcomm_device::mpc_mem_r(offs_t offset)
 {
 	return m_cpu->space(AS_PROGRAM).read_byte(offset);
 }
 
-void ybdcomm_device::dma_mem_w(offs_t offset, uint8_t data)
+void ybdcomm_device::mpc_mem_w(offs_t offset, uint8_t data)
 {
 	m_cpu->space(AS_PROGRAM).write_byte(offset, data);
 }
@@ -401,6 +410,13 @@ uint8_t ybdcomm_device::z80_stat_r()
 void ybdcomm_device::z80_stat_w(uint8_t data)
 {
 	m_z80_stat = data;
+}
+
+
+#ifdef YBDCOMM_SIMULATION
+TIMER_CALLBACK_MEMBER(ybdcomm_device::tick_timer)
+{
+	comm_tick();
 }
 
 int ybdcomm_device::comm_frameOffset(uint8_t cabIdx)
@@ -456,7 +472,7 @@ void ybdcomm_device::comm_tick()
 {
 	if (m_linkenable == 0x01)
 	{
-		uint8_t cabIdx = dma_mem_r(0x4000);
+		uint8_t cabIdx = mpc_mem_r(0x4000);
 
 		int frameSize;
 		int frameOffset;
@@ -607,7 +623,7 @@ void ybdcomm_device::comm_tick()
 					frameSize = comm_frameSize(idx);
 					for (int j = 0x00 ; j < frameSize ; j++)
 					{
-						dma_mem_w(frameOffset + j, m_buffer0[1 + j]);
+						mpc_mem_w(frameOffset + j, m_buffer0[1 + j]);
 					}
 
 					// if not own message
@@ -707,12 +723,13 @@ void ybdcomm_device::send_data(uint8_t frameType, int frameOffset, int frameSize
 	m_buffer0[0] = frameType;
 	for (int i = 0x00 ; i < frameSize ; i++)
 	{
-		m_buffer0[1 + i] = dma_mem_r(frameOffset + i);
+		m_buffer0[1 + i] = mpc_mem_r(frameOffset + i);
 	}
 	send_frame(dataSize);
 }
 
-void ybdcomm_device::send_frame(int dataSize){
+void ybdcomm_device::send_frame(int dataSize)
+{
 	if (!m_line_tx)
 		return;
 
@@ -735,3 +752,4 @@ void ybdcomm_device::send_frame(int dataSize){
 		}
 	}
 }
+#endif

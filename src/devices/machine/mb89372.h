@@ -62,10 +62,11 @@ public:
 	auto in_memr_callback() { return m_in_memr_cb.bind(); }
 	auto out_memw_callback() { return m_out_memw_cb.bind(); }
 
-
 	// read/write handlers
 	uint8_t read(offs_t offset);
 	void write(offs_t offset, uint8_t data);
+
+	DECLARE_WRITE_LINE_MEMBER( hack_w );
 
 protected:
 	// device-level overrides
@@ -82,6 +83,7 @@ private:
 
 	// pins
 	int m_hreq;
+	int m_hack;
 	int m_irq;
 
 	// registers
@@ -92,6 +94,19 @@ private:
 
 	devcb_read8      m_in_memr_cb;
 	devcb_write8     m_out_memw_cb;
+
+	// dma
+	struct
+	{
+		uint32_t m_address;
+		uint32_t m_count;
+		uint32_t m_base_address;
+		uint32_t m_base_count;
+		uint8_t m_mode;
+	} m_channel[4];
+	int m_current_channel;
+	int m_last_channel;
+	void checkDma();
 
 	uint16_t m_intr_delay;
 	uint16_t m_sock_delay;

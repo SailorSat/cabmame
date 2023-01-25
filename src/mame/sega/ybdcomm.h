@@ -42,27 +42,32 @@ protected:
 	// optional information overrides
 	virtual void device_add_mconfig(machine_config &config) override;
 
-	TIMER_CALLBACK_MEMBER(tick_timer);
-
 private:
 	required_device<z80_device> m_cpu;
 	required_device<mb8421_device> m_dpram;
 	required_device<mb89372_device> m_mpc;
 
+	// MB8421
 	DECLARE_WRITE_LINE_MEMBER(dpram_int5_w);
-	DECLARE_WRITE_LINE_MEMBER(dlc_int7_w);
 
 	uint8_t m_dma_reg[0x8]{}; // probably more
 	void dma_reg_w(offs_t offset, uint8_t data);
 	void update_dma();
-	uint8_t dma_mem_r(offs_t offset);
-	void dma_mem_w(offs_t offset, uint8_t data);
+
+	// MB89372
+	DECLARE_WRITE_LINE_MEMBER(mpc_hreq_w);
+	DECLARE_WRITE_LINE_MEMBER(mpc_int7_w);
+	uint8_t mpc_mem_r(offs_t offset);
+	void mpc_mem_w(offs_t offset, uint8_t data);
 
 	uint8_t m_ybd_stat = 0; // not sure about those yet - 7474 for top bit? and 74161 for lower 4 bits
 	uint8_t m_z80_stat = 0; // not sure about those yet - 74LS374
 
 	uint8_t z80_stat_r();
 	void z80_stat_w(uint8_t data);
+
+#ifdef YBDCOMM_SIMULATION
+	TIMER_CALLBACK_MEMBER(tick_timer);
 
 	osd_file::ptr m_line_rx; // rx line - can be either differential, simple serial or toslink
 	osd_file::ptr m_line_tx; // tx line - is differential, simple serial and toslink
@@ -85,6 +90,7 @@ private:
 	void send_frame(int dataSize);
 
 	emu_timer *m_tick_timer;
+#endif
 };
 
 // device type definition

@@ -147,7 +147,8 @@ const tiny_rom_entry *ybdcomm_device::device_rom_region() const
 ybdcomm_device::ybdcomm_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock) :
 	device_t(mconfig, YBDCOMM, tag, owner, clock),
 	m_cpu(*this, Z80_TAG),
-	m_dpram(*this, "dpram")
+	m_dpram(*this, "dpram"),
+	m_mpc(*this, "commmpc")
 {
 	std::fill(std::begin(m_dma_reg), std::end(m_dma_reg), 0);
 
@@ -174,6 +175,9 @@ void ybdcomm_device::device_start()
 {
 	m_ybd_stat = 0;
 	m_z80_stat = 0;
+
+	m_tick_timer = timer_alloc(FUNC(ybdcomm_device::tick_timer), this);
+	m_tick_timer->adjust(attotime::from_hz(600), 0, attotime::from_hz(600));
 }
 
 //-------------------------------------------------
@@ -192,7 +196,6 @@ void ybdcomm_device::device_reset_after_children()
 uint8_t ybdcomm_device::ex_r(offs_t offset)
 {
 	int bank = offset >> 11;
-	logerror("ybdcomm-ex_r: %04x %02x\n", offset, bank);
 
 	switch (bank)
 	{
@@ -201,17 +204,12 @@ uint8_t ybdcomm_device::ex_r(offs_t offset)
 
 		case 1:
 			// z80 status
-#ifdef YBDCOMM_SIMULATION
-			comm_tick();
-#endif
+			LOG("ybdcomm-ex_r: %02x %02x\n", bank, m_z80_stat);
 			return m_z80_stat;
 
 		case 2:
 			// status register?
-			LOG("ybdcomm-ex_r: %02x %02x\n", offset, m_ybd_stat);
-#ifdef YBDCOMM_SIMULATION
-			comm_tick();
-#endif
+			LOG("ybdcomm-ex_r: %02x %02x\n", bank, m_ybd_stat);
 			return m_ybd_stat;
 
 		default:
@@ -229,7 +227,6 @@ void ybdcomm_device::ex_w(offs_t offset, uint8_t data)
 	{
 		case 0:
 			m_dpram->right_w(offset, data);
-			comm_tick();
 			break;
 
 		case 1:
@@ -283,12 +280,18 @@ void ybdcomm_device::ex_w(offs_t offset, uint8_t data)
 					m_linkenable = 0x00;
 				}
 			}
-			comm_tick();
 #endif
 			break;
 		default:
 			logerror("ybdcomm-ex_w: %02x %02x\n", offset, data);
 	}
+}
+
+TIMER_CALLBACK_MEMBER(ybdcomm_device::tick_timer)
+{
+#ifdef YBDCOMM_SIMULATION
+	comm_tick();
+#endif
 }
 
 WRITE_LINE_MEMBER(ybdcomm_device::dpram_int5_w)
@@ -342,6 +345,9 @@ void ybdcomm_device::update_dma()
 				dma_mem_w(tx_dma_config + 5, tx_flag);
 				logerror("dma magic: size %04x from %04x to %04x\n", rx_size, tx_addr, rx_addr);
 
+				m_dma_reg[3] |= 0x01;
+				m_dma_reg[7] |= 0x01;
+
 				if (rx_flag & 0x10)
 				{
 					m_dma_reg[0x00] = dma_mem_r(rx_dma_config + 9);
@@ -365,6 +371,15 @@ void ybdcomm_device::update_dma()
 				logerror("rx size != tx size\n");
 			}
 		}
+	}
+
+	if ((m_dma_reg[3] & 0x01) || (m_dma_reg[7] & 0x01))
+	{
+		dlc_int7_w(1);
+	}
+	else
+	{
+		dlc_int7_w(0);
 	}
 }
 
@@ -603,8 +618,8 @@ void ybdcomm_device::comm_tick()
 					}
 					else
 					{
-						//m_z80_stat &= 0x7F;
-						m_z80_stat = 0;
+						m_z80_stat &= 0x7F;
+						//m_z80_stat = 0;
 					}
 				}
 
@@ -612,7 +627,7 @@ void ybdcomm_device::comm_tick()
 				recv = read_frame(dataSize);
 			}
 
-			//m_z80_stat ^= 0x01;
+			m_z80_stat ^= 0x01;
 
 			// update "ring buffer" if link established
 			// live relay does not send data
@@ -624,12 +639,8 @@ void ybdcomm_device::comm_tick()
 					frameOffset = comm_frameOffset(cabIdx);
 					frameSize = comm_frameSize(cabIdx);
 					send_data(cabIdx, frameOffset, frameSize, dataSize);
-					//m_z80_stat |= 0x80;
-					m_z80_stat = 0x01;
-				}
-				else
-				{
-					m_z80_stat ^= 0x01;
+					m_z80_stat |= 0x80;
+					//m_z80_stat = 0x01;
 				}
 			}
 

@@ -5,11 +5,12 @@
 
 #pragma once
 
-#define YBDCOMM_SIMULATION
+#define YBDCOMM_SIMULATION_OFF
 
 #include "osdfile.h"
 #include "cpu/z80/z80.h"
 #include "machine/mb8421.h"
+#include "machine/mb89372.h"
 
 
 //**************************************************************************
@@ -41,9 +42,12 @@ protected:
 	// optional information overrides
 	virtual void device_add_mconfig(machine_config &config) override;
 
+	TIMER_CALLBACK_MEMBER(tick_timer);
+
 private:
 	required_device<z80_device> m_cpu;
 	required_device<mb8421_device> m_dpram;
+	required_device<mb89372_device> m_mpc;
 
 	DECLARE_WRITE_LINE_MEMBER(dpram_int5_w);
 	DECLARE_WRITE_LINE_MEMBER(dlc_int7_w);
@@ -79,6 +83,8 @@ private:
 	int read_frame(int dataSize);
 	void send_data(uint8_t frameType, int frameOffset, int frameSize, int dataSize);
 	void send_frame(int dataSize);
+
+	emu_timer *m_tick_timer;
 };
 
 // device type definition

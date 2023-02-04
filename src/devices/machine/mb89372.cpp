@@ -92,8 +92,8 @@ void mb89372_device::device_start()
 		elem.m_address = 0;
 		elem.m_count = 0;
 		elem.m_base_address = 0;
-		elem.m_base_count = 0;
-		elem.m_mode = 0;
+		elem.m_base_flags = 0;
+		elem.m_state = 0;
 	}
 
 	// state saving
@@ -105,8 +105,8 @@ void mb89372_device::device_start()
 	save_item(STRUCT_MEMBER(m_channel, m_address));
 	save_item(STRUCT_MEMBER(m_channel, m_count));
 	save_item(STRUCT_MEMBER(m_channel, m_base_address));
-	save_item(STRUCT_MEMBER(m_channel, m_base_count));
-	save_item(STRUCT_MEMBER(m_channel, m_mode));
+	save_item(STRUCT_MEMBER(m_channel, m_base_flags));
+	save_item(STRUCT_MEMBER(m_channel, m_state));
 
 	save_item(NAME(m_current_channel));
 	save_item(NAME(m_last_channel));
@@ -138,6 +138,7 @@ void mb89372_device::device_reset()
 	m_current_channel = -1;
 	m_last_channel = 3;
 
+	m_dma_delay = 0;
 	m_intr_delay = 0;
 	m_sock_delay = 0x20;
 
@@ -160,20 +161,32 @@ void mb89372_device::execute_run()
 		if (m_intr_delay > 0)
 		{
 			m_intr_delay--;
-			if (m_intr_delay == 0)
-			{
-			}
 		}
+		else 
+		{
+			//m_intr_delay = 0x04;
+			checkInts();
+		}
+
 		if (m_sock_delay > 0)
 		{
 			m_sock_delay--;
-			if (m_sock_delay == 0)
-			{
-				m_sock_delay = 0x20;
-				checkSockets();
-			}
 		}
-		checkDma();
+		else
+		{
+			m_sock_delay = 0x20;
+			checkSockets();
+		}
+
+		if (m_dma_delay > 0)
+		{
+			m_dma_delay--;
+		}
+		else
+		{
+			checkDma();
+		}
+
 		m_icount--;
 	}
 }
@@ -188,6 +201,14 @@ uint8_t mb89372_device::read(offs_t offset)
 	uint8_t data = 0xff;
 	switch (offset & 0x3f)
 	{
+		case 0x08:
+			data = (m_rx_length > 0) ? 1 : 0;
+			break;
+
+		case 0x0f:
+			data = rxRead();
+			break;
+
 		default:
 			data = m_reg[offset & 0x3f];
 			logerror("MB89372 unimplemented register read @%02X\n", offset);
@@ -224,10 +245,162 @@ WRITE_LINE_MEMBER( mb89372_device::hack_w )
 
 
 //**************************************************************************
+//  int logic
+//**************************************************************************
+void mb89372_device::checkInts()
+{
+	int active = (m_reg[0x23] & 0x01) | (m_reg[0x27] & 0x01);
+	set_irq(active);
+}
+
+
+//**************************************************************************
 //  dma logic
 //**************************************************************************
 void mb89372_device::checkDma()
 {
+	if (m_current_channel != -1)
+	{
+		int reg = 0x20 + (m_current_channel * 4);
+		int addr = (m_reg[reg + 2] << 16) | (m_reg[reg + 1] << 8) | m_reg[reg];
+		switch (m_channel[m_current_channel].m_state)
+		{
+			case 0:
+				// inactive
+				m_current_channel = -1;
+				break;
+
+			case 1:
+				// waiting for hack
+				set_hreq(1);
+				if (m_hack)
+				{
+					m_channel[m_current_channel].m_state = 2;
+				}
+				break;
+
+			case 2:
+				// read command
+				m_channel[m_current_channel].m_base_address = addr;
+				m_channel[m_current_channel].m_count = (m_in_memr_cb(addr + 1) << 8) | m_in_memr_cb(addr);
+				m_channel[m_current_channel].m_address = (m_in_memr_cb(addr + 4) << 16) | (m_in_memr_cb(addr + 3) << 8) | m_in_memr_cb(addr + 2);
+				m_channel[m_current_channel].m_base_flags = m_in_memr_cb(addr + 5);
+
+				m_dma_delay = 6*4;
+				m_channel[m_current_channel].m_state = 3;
+				logerror("read %01x\n", m_current_channel);
+
+				break;
+
+			case 3:
+				// check command
+				if (m_current_channel == 0)
+				{
+					// rx channel
+					if (m_channel[m_current_channel].m_count > m_rx_length)
+					{
+						logerror("not enough data for %01x\n", m_current_channel);
+						m_current_channel = -1;
+						set_hreq(0);
+					}
+					else
+					{
+						m_channel[m_current_channel].m_state = 4;
+					}
+				}
+				else
+				{
+					// tx channel
+					m_channel[m_current_channel].m_state = 5;
+				}
+				break;
+
+			case 4:
+				// execute rx
+				set_hreq(1);
+				if (m_hack)
+				{
+					if (m_channel[m_current_channel].m_count > 0)
+					{
+						m_out_memw_cb(m_channel[m_current_channel].m_address, rxRead());
+						m_channel[m_current_channel].m_address++;
+						m_channel[m_current_channel].m_count--;
+						m_dma_delay = 4;
+						logerror("rx %01x\n", m_current_channel);
+					}
+					else
+					{
+						m_channel[m_current_channel].m_state = 6;
+						logerror("rc %01x\n", m_current_channel);
+					}
+				}
+				break;
+
+			case 5:
+				// execute tx
+				set_hreq(1);
+				if (m_hack)
+				{
+					if (m_channel[m_current_channel].m_count > 0)
+					{
+						txWrite(m_in_memr_cb(m_channel[m_current_channel].m_address));
+						m_channel[m_current_channel].m_address++;
+						m_channel[m_current_channel].m_count--;
+						m_dma_delay = 4;
+						logerror("tx %01x\n", m_current_channel);
+					}
+					else
+					{
+						txComplete();
+						m_channel[m_current_channel].m_state = 6;
+						logerror("tc %01x\n", m_current_channel);
+					}
+				}
+				break;
+
+			case 6:
+				m_out_memw_cb(m_channel[m_current_channel].m_base_address + 5, m_channel[m_current_channel].m_base_flags | 0x60);
+				if (m_channel[m_current_channel].m_base_flags & 0x10)
+				{
+					// continue chain
+					m_reg[reg] = m_in_memr_cb(m_channel[m_current_channel].m_base_address + 9);
+					m_reg[reg + 1] = m_in_memr_cb(m_channel[m_current_channel].m_base_address + 10);
+					m_reg[reg + 2] = m_in_memr_cb(m_channel[m_current_channel].m_base_address + 11);
+					m_channel[m_current_channel].m_state = 2;
+					logerror("continue %01x\n", m_current_channel);
+				}
+				else
+				{
+					// chain complete
+					m_reg[reg + 3] |= 0x01; // enable int flag?
+					m_reg[reg + 3] &= 0x7f; // disable active flag?
+					m_channel[m_current_channel].m_state = 0;
+					logerror("completed %01x\n", m_current_channel);
+					m_current_channel = -1;
+					set_hreq(0);
+				}
+				break;
+		}
+	}
+	else
+	{
+		for (int channel = 3; channel >= 0; channel--)
+		{
+			if (m_channel[channel].m_state > 0)
+			{
+				m_current_channel = channel;
+				return;
+			}
+			int reg = 0x20 + (channel * 4);
+			if ((m_channel[channel].m_state == 0) && (m_reg[reg + 3] & 0x80))
+			{
+				m_channel[channel].m_state = 1;
+				m_current_channel = channel;
+				logerror("meep... %01x\n", channel);
+				return;
+			}
+		}
+	}
 }
 
 

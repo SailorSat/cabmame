@@ -5,7 +5,7 @@
 
 #pragma once
 
-#define YBDCOMM_SIMULATION_OFF
+#define YBDCOMM_SIMULATION
 
 #include "osdfile.h"
 #include "cpu/z80/z80.h"
@@ -50,10 +50,6 @@ private:
 	// MB8421
 	DECLARE_WRITE_LINE_MEMBER(dpram_int5_w);
 
-	uint8_t m_dma_reg[0x8]{}; // probably more
-	void dma_reg_w(offs_t offset, uint8_t data);
-	void update_dma();
-
 	// MB89372
 	DECLARE_WRITE_LINE_MEMBER(mpc_hreq_w);
 	DECLARE_WRITE_LINE_MEMBER(mpc_int7_w);
@@ -75,6 +71,7 @@ private:
 	char m_remotehost[256]{};
 	uint8_t m_buffer0[0x200]{};
 	uint8_t m_buffer1[0x200]{};
+	uint8_t m_framesync;
 
 	uint8_t m_linkenable = 0;
 	uint16_t m_linktimer = 0;

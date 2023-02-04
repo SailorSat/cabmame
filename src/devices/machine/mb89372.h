@@ -95,19 +95,23 @@ private:
 	devcb_read8      m_in_memr_cb;
 	devcb_write8     m_out_memw_cb;
 
+	// ints
+	void checkInts();
+
 	// dma
 	struct
 	{
 		uint32_t m_address;
 		uint32_t m_count;
 		uint32_t m_base_address;
-		uint32_t m_base_count;
-		uint8_t m_mode;
+		uint32_t m_base_flags;
+		uint8_t m_state;
 	} m_channel[4];
 	int m_current_channel;
 	int m_last_channel;
 	void checkDma();
 
+	uint16_t m_dma_delay;
 	uint16_t m_intr_delay;
 	uint16_t m_sock_delay;
 

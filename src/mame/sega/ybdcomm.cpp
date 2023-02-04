@@ -170,6 +170,8 @@ ybdcomm_device::ybdcomm_device(const machine_config &mconfig, const char *tag, d
 	strcat(m_remotehost, mconfig.options().comm_remotehost());
 	strcat(m_remotehost, ":");
 	strcat(m_remotehost, mconfig.options().comm_remoteport());
+
+	m_framesync = mconfig.options().comm_framesync() ? 0x01 : 0x00;
 #endif
 }
 
@@ -312,84 +314,6 @@ WRITE_LINE_MEMBER(ybdcomm_device::mpc_int7_w)
 {
 	logerror("mpc_int7_w: %02x\n", state);
 	m_cpu->set_input_line_and_vector(0, state ? ASSERT_LINE : CLEAR_LINE, 0xff); // Z80 INT7
-}
-
-void ybdcomm_device::dma_reg_w(offs_t offset, uint8_t data)
-{
-	m_dma_reg[offset] = data;
-	logerror("dma_reg_w: %02x %02x\n", offset, data);
-	update_dma();
-}
-
-void ybdcomm_device::update_dma()
-{
-	// check if both channels are active to begin with
-	if ((m_dma_reg[0x03] & 0x80) && (m_dma_reg[0x07] & 0x80))
-	{
-		int rx_dma_config = (m_dma_reg[0x02] << 16) | (m_dma_reg[0x01] << 8) | m_dma_reg[0x00];
-		int tx_dma_config = (m_dma_reg[0x06] << 16) | (m_dma_reg[0x05] << 8) | m_dma_reg[0x04];
-
-		if (rx_dma_config && tx_dma_config)
-		{
-			int rx_size = (mpc_mem_r(rx_dma_config + 1) << 8) | mpc_mem_r(rx_dma_config);
-			int tx_size = (mpc_mem_r(tx_dma_config + 1) << 8) | mpc_mem_r(tx_dma_config);
-
-			if (rx_size == tx_size)
-			{
-				int rx_addr = (mpc_mem_r(rx_dma_config + 4) << 16) | (mpc_mem_r(rx_dma_config + 3) << 8) | mpc_mem_r(rx_dma_config + 2);
-				int tx_addr = (mpc_mem_r(tx_dma_config + 4) << 16) | (mpc_mem_r(tx_dma_config + 3) << 8) | mpc_mem_r(tx_dma_config + 2);
-
-				int rx_flag = mpc_mem_r(rx_dma_config + 5);
-				int tx_flag = mpc_mem_r(tx_dma_config + 5);
-
-				for (int i = 0 ; i < rx_size ; i++)
-				{
-					mpc_mem_w(rx_addr + i, mpc_mem_r(tx_addr + i));
-				}
-
-				rx_flag |= 0x60;
-				tx_flag |= 0x60;
-
-				mpc_mem_w(rx_dma_config + 5, rx_flag);
-				mpc_mem_w(tx_dma_config + 5, tx_flag);
-				logerror("dma magic: size %04x from %04x to %04x\n", rx_size, tx_addr, rx_addr);
-
-				m_dma_reg[3] |= 0x01;
-				m_dma_reg[7] |= 0x01;
-
-				if (rx_flag & 0x10)
-				{
-					m_dma_reg[0x00] = mpc_mem_r(rx_dma_config + 9);
-					m_dma_reg[0x01] = mpc_mem_r(rx_dma_config + 10);
-					m_dma_reg[0x02] = mpc_mem_r(rx_dma_config + 11);
-				}
-				if (tx_flag & 0x10)
-				{
-					m_dma_reg[0x04] = mpc_mem_r(tx_dma_config + 9);
-					m_dma_reg[0x05] = mpc_mem_r(tx_dma_config + 10);
-					m_dma_reg[0x06] = mpc_mem_r(tx_dma_config + 11);
-				}
-
-				if ((rx_flag & 0x10) && (tx_flag & 0x10))
-				{
-					update_dma();
-				}
-			}
-			else
-			{
-				logerror("rx size != tx size\n");
-			}
-		}
-	}
-
-	if ((m_dma_reg[3] & 0x01) || (m_dma_reg[7] & 0x01))
-	{
-		mpc_int7_w(1);
-	}
-	else
-	{
-		mpc_int7_w(0);
-	}
 }
 
 uint8_t ybdcomm_device::mpc_mem_r(offs_t offset)
@@ -610,38 +534,42 @@ void ybdcomm_device::comm_tick()
 		if (m_linkalive == 0x01)
 		{
 			// link established
-			// try to read a message
-			recv = read_frame(dataSize);
-			while (recv > 0)
+			do
 			{
-				// check if valid id
-				idx = m_buffer0[0];
-				if (idx > 0 && idx <= m_linkcount)
-				{
-					// save message to "ring buffer"
-					frameOffset = comm_frameOffset(idx);
-					frameSize = comm_frameSize(idx);
-					for (int j = 0x00 ; j < frameSize ; j++)
-					{
-						mpc_mem_w(frameOffset + j, m_buffer0[1 + j]);
-					}
-
-					// if not own message
-					if (idx != cabIdx)
-					{
-						// forward message to other nodes
-						send_frame(dataSize);
-					}
-					else
-					{
-						m_z80_stat &= 0x7F;
-						//m_z80_stat = 0;
-					}
-				}
-
-				// try to read another message
+				// try to read a message
 				recv = read_frame(dataSize);
+				while (recv > 0)
+				{
+					// check if valid id
+					idx = m_buffer0[0];
+					if (idx > 0 && idx <= m_linkcount)
+					{
+						// save message to "ring buffer"
+						frameOffset = comm_frameOffset(idx);
+						frameSize = comm_frameSize(idx);
+						for (int j = 0x00 ; j < frameSize ; j++)
+						{
+							mpc_mem_w(frameOffset + j, m_buffer0[1 + j]);
+						}
+
+						// if not own message
+						if (idx != cabIdx)
+						{
+							// forward message to other nodes
+							send_frame(dataSize);
+						}
+						else
+						{
+							m_z80_stat &= 0x7F;
+							m_linktimer = 0x00;
+						}
+					}
+
+					// try to read another message
+					recv = read_frame(dataSize);
+				}
 			}
+			while (m_linktimer == 0x01);
 
 			m_z80_stat ^= 0x01;
 
@@ -656,7 +584,9 @@ void ybdcomm_device::comm_tick()
 					frameSize = comm_frameSize(cabIdx);
 					send_data(cabIdx, frameOffset, frameSize, dataSize);
 					m_z80_stat |= 0x80;
-					//m_z80_stat = 0x01;
+
+					// enable wait for sync
+					m_linktimer = m_framesync;
 				}
 			}
 

@@ -5,7 +5,7 @@
 
 #pragma once
 
-#define XBDCOMM_SIMULATION_X
+#define XBDCOMM_SIMULATION
 
 #include "osdfile.h"
 #include "cpu/z80/z80.h"

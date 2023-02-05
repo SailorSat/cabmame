@@ -799,35 +799,6 @@ void segaybd_state::pdriftl_excs_w(offs_t offset, uint16_t data, uint16_t mem_ma
 	m_ybdcomm->ex_w(offset, data & 0xff);
 }
 
-WRITE_LINE_MEMBER(segaybd_state::mb8421_intl)
-{
-	// shared ram interrupt request from linkcpu side
-	// unused?
-}
-
-WRITE_LINE_MEMBER(segaybd_state::mb8421_intr)
-{
-	// shared ram interrupt request from maincpu side
-	m_linkcpu->set_input_line_and_vector(0, state ? ASSERT_LINE : CLEAR_LINE, 0xef); // Z80 - RST $28
-}
-
-
-uint16_t segaybd_state::link_r()
-{
-	return machine().rand();
-}
-
-uint16_t segaybd_state::link2_r()
-{
-	return 0x0000;
-}
-
-void segaybd_state::link2_w(offs_t offset, uint16_t data, uint16_t mem_mask)
-{
-	data &= mem_mask;
-	logerror("link2_w %04x\n", data);
-}
-
 void segaybd_state::main_map_link(address_map &map)
 {
 	main_map(map);
@@ -835,30 +806,9 @@ void segaybd_state::main_map_link(address_map &map)
 }
 
 
-void segaybd_state::link_map(address_map &map)
-{
-	map.unmap_value_high();
-	map(0x0000, 0x0fff).rom();
-	map(0x2000, 0x3fff).ram(); // 0x2000-0x2*** maybe shared with other boards?
-	map(0x4000, 0x47ff).rw("mb8421", FUNC(mb8421_device::right_r), FUNC(mb8421_device::right_w));
-}
-
-#if 0
-uint8_t segaybd_state::link_portc0_r()
-{
-	return 0xf8;
-}
-#endif
-
-void segaybd_state::link_portmap(address_map &map)
-{
-	map.unmap_value_high();
-	map.global_mask(0xff);
-
-	map(0x40, 0x40).portr("LinkID_DSW1");
-	map(0xc0, 0xc0).portr("LinkID_DSW2");
-}
-
+//**************************************************************************
+//  MOTOR BOARD
+//**************************************************************************
 
 void segaybd_state::motor_map(address_map &map)
 {
@@ -1245,65 +1195,6 @@ static INPUT_PORTS_START( pdriftl )
 	PORT_DIPSETTING(    0xc0, DEF_STR( 5C_1C ) )
 	PORT_DIPSETTING(    0xb0, DEF_STR( 6C_1C ) )
 	PORT_DIPSETTING(    0x00, "Free Play (if Coin A too) or 1/1" )
-
-	PORT_START("LinkID_DSW1")
-	PORT_DIPNAME( 0x01, 0x01, DEF_STR( Unknown ) )
-	PORT_DIPSETTING(    0x01, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x02, 0x02, DEF_STR( Unknown ) )  // Affects how the z80 access memory at 0x2000-0x2***
-	PORT_DIPSETTING(    0x02, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x04, 0x04, DEF_STR( Unknown ) )
-	PORT_DIPSETTING(    0x04, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x08, 0x08, DEF_STR( Unknown ) )
-	PORT_DIPSETTING(    0x08, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x10, 0x10, DEF_STR( Unknown ) )
-	PORT_DIPSETTING(    0x10, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x20, 0x20, DEF_STR( Unknown ) )
-	PORT_DIPSETTING(    0x20, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x40, 0x40, DEF_STR( Unknown ) )
-	PORT_DIPSETTING(    0x40, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x80, 0x80, DEF_STR( Unknown ) )
-	PORT_DIPSETTING(    0x80, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-
-	PORT_START("LinkID_DSW2")
-	PORT_DIPNAME( 0x0f, 0x01, "Cabinet ID" )
-	PORT_DIPSETTING(    0x00, "0" )
-	PORT_DIPSETTING(    0x01, "1" ) // accessed unmapped areas if stand-alone isn't setup properly?
-	PORT_DIPSETTING(    0x02, "2" )
-	PORT_DIPSETTING(    0x03, "3" )
-	PORT_DIPSETTING(    0x04, "4" )
-	PORT_DIPSETTING(    0x05, "5" )
-	PORT_DIPSETTING(    0x06, "6" )
-	PORT_DIPSETTING(    0x07, "7" )
-	PORT_DIPSETTING(    0x08, "8" )
-	PORT_DIPSETTING(    0x09, "9" )
-	PORT_DIPSETTING(    0x0a, "10" )
-	PORT_DIPSETTING(    0x0b, "11" )
-	// enabled for debugging
-	PORT_DIPSETTING(    0x0c, "12 (invalid)" )
-	PORT_DIPSETTING(    0x0d, "13 (invalid)" )
-	PORT_DIPSETTING(    0x0e, "14 (invalid)" )
-	PORT_DIPSETTING(    0x0f, "15 (invalid)" )
-
-	PORT_DIPNAME( 0x10, 0x10, DEF_STR( Unknown ) )
-	PORT_DIPSETTING(    0x10, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x20, 0x20, DEF_STR( Unknown ) )
-	PORT_DIPSETTING(    0x20, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x40, 0x40, DEF_STR( Unknown ) )
-	PORT_DIPSETTING(    0x40, DEF_STR( Off ) )
-	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_DIPNAME( 0x80, 0x00, "Communication Mode" )
-	PORT_DIPSETTING(    0x80, "Master/Slave" )
-	PORT_DIPSETTING(    0x00, "Stand-Alone" )
 INPUT_PORTS_END
 
 
@@ -1489,8 +1380,6 @@ void segaybd_state::yboard(machine_config &config)
 	pcm.add_route(1, "rspeaker", 1.0);
 }
 
-
-// irq at 0x28 is from MB8421, and irq at 0x38 probably from MB89372?
 void segaybd_state::yboard_link(machine_config &config)
 {
 	yboard(config);

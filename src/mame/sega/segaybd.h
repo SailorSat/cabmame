@@ -31,7 +31,6 @@ public:
 		, m_subx(*this, "subx")
 		, m_suby(*this, "suby")
 		, m_soundcpu(*this, "soundcpu")
-		, m_linkcpu(*this, "linkcpu")
 		, m_watchdog(*this, "watchdog")
 		, m_screen(*this, "screen")
 		, m_bsprites(*this, "bsprites")
@@ -69,14 +68,6 @@ private:
 	void misc_output_w(uint8_t data);
 	void output2_w(uint8_t data);
 
-	// linked cabinet specific handlers
-	DECLARE_WRITE_LINE_MEMBER(mb8421_intl);
-	DECLARE_WRITE_LINE_MEMBER(mb8421_intr);
-	uint16_t link_r();
-	uint16_t link2_r();
-	void link2_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
-//  uint8_t link_portc0_r();
-
 	// input helpers
 	ioport_value analog_mux();
 
@@ -93,8 +84,6 @@ private:
 	// video updates
 	uint32_t screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 
-	void link_map(address_map &map);
-	void link_portmap(address_map &map);
 	void main_map(address_map &map);
 	void main_map_link(address_map &map);
 	void motor_map(address_map &map);
@@ -119,7 +108,6 @@ private:
 	required_device<m68000_device> m_subx;
 	required_device<m68000_device> m_suby;
 	required_device<z80_device> m_soundcpu;
-	optional_device<z80_device> m_linkcpu;
 	required_device<mb3773_device> m_watchdog;
 	required_device<screen_device> m_screen;
 	required_device<sega_sys16b_sprite_device> m_bsprites;

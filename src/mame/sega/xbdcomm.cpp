@@ -47,7 +47,7 @@ void xbdcomm_device::xbdcomm_mem(address_map &map)
 void xbdcomm_device::xbdcomm_io(address_map &map)
 {
 	map.global_mask(0xff);
-	map(0x20, 0x27).w(FUNC(xbdcomm_device::dma_reg_w));
+	map(0x00, 0x3f).rw(m_mpc, FUNC(mb89372_device::read), FUNC(mb89372_device::write));
 	map(0x40, 0x40).rw(FUNC(xbdcomm_device::z80_stat_r), FUNC(xbdcomm_device::z80_debug_w));
 	map(0x80, 0x80).w(FUNC(xbdcomm_device::z80_stat_w));
 }
@@ -78,6 +78,12 @@ void xbdcomm_device::device_add_mconfig(machine_config &config)
 	m_cpu->set_io_map(&xbdcomm_device::xbdcomm_io);
 
 	MB8421(config, m_dpram).intl_callback().set(FUNC(xbdcomm_device::dpram_int5_w));
+
+	MB89372(config, m_mpc, 8000000); // 16 MHz / 2
+	m_mpc->out_hreq_callback().set(FUNC(xbdcomm_device::mpc_hreq_w));
+	m_mpc->out_irq_callback().set(FUNC(xbdcomm_device::mpc_int7_w));
+	m_mpc->in_memr_callback().set(FUNC(xbdcomm_device::mpc_mem_r));
+	m_mpc->out_memw_callback().set(FUNC(xbdcomm_device::mpc_mem_w));
 }
 
 //-------------------------------------------------
@@ -99,10 +105,10 @@ const tiny_rom_entry *xbdcomm_device::device_rom_region() const
 xbdcomm_device::xbdcomm_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock) :
 	device_t(mconfig, XBDCOMM, tag, owner, clock),
 	m_cpu(*this, Z80_TAG),
-	m_dpram(*this, "dpram")
+	m_dpram(*this, "dpram"),
+	m_mpc(*this, "commmpc")
 {
-	std::fill(std::begin(m_dma_reg), std::end(m_dma_reg), 0);
-
+#ifdef XBDCOMM_SIMULATION
 	// prepare localhost "filename"
 	m_localhost[0] = 0;
 	strcat(m_localhost, "socket.");
@@ -116,6 +122,7 @@ xbdcomm_device::xbdcomm_device(const machine_config &mconfig, const char *tag, d
 	strcat(m_remotehost, mconfig.options().comm_remotehost());
 	strcat(m_remotehost, ":");
 	strcat(m_remotehost, mconfig.options().comm_remoteport());
+#endif
 }
 
 //-------------------------------------------------
@@ -140,6 +147,7 @@ void xbdcomm_device::device_reset()
 void xbdcomm_device::device_reset_after_children()
 {
 	m_cpu->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
+	m_mpc->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
 }
 
 uint8_t xbdcomm_device::ex_r(offs_t offset)
@@ -192,9 +200,6 @@ void xbdcomm_device::ex_w(offs_t offset, uint8_t data)
 		case 0x08:
 			// page latch
 			m_ex_page = data;
-#ifndef XBDCOMM_SIMULATION
-			comm_tick();
-#endif
 			break;
 
 		case 0x10:
@@ -207,13 +212,13 @@ void xbdcomm_device::ex_w(offs_t offset, uint8_t data)
 			if (m_xbd_stat & 0x80)
 			{
 				m_cpu->set_input_line(INPUT_LINE_RESET, CLEAR_LINE);
+				m_mpc->set_input_line(INPUT_LINE_RESET, CLEAR_LINE);
 			}
 			else
 			{
 				device_reset();
 				device_reset_after_children();
 			}
-			LOG("xbdcomm-ex_w: %02x %02x\n", offset, data);
 #else
 			if (m_xbd_stat & 0x80)
 			{
@@ -226,7 +231,7 @@ void xbdcomm_device::ex_w(offs_t offset, uint8_t data)
 					m_linkid = 0x00;
 					m_linkalive = 0x00;
 					m_linkcount = 0x00;
-					m_linktimer = 0x00e8; // 58 fps * 4s
+					m_linktimer = 0x003a;
 				}
 			}
 			else
@@ -254,89 +259,29 @@ void xbdcomm_device::ex_w(offs_t offset, uint8_t data)
 	}
 }
 
+WRITE_LINE_MEMBER(xbdcomm_device::mpc_hreq_w)
+{
+	m_cpu->set_input_line(INPUT_LINE_HALT, state ? ASSERT_LINE : CLEAR_LINE);
+	m_mpc->hack_w(state);
+}
+
 WRITE_LINE_MEMBER(xbdcomm_device::dpram_int5_w)
 {
 	m_cpu->set_input_line_and_vector(0, state ? ASSERT_LINE : CLEAR_LINE, 0xef); // Z80 INT5
 }
 
-WRITE_LINE_MEMBER(xbdcomm_device::dlc_int7_w)
+WRITE_LINE_MEMBER(xbdcomm_device::mpc_int7_w)
 {
-	logerror("dlc_int7_w: %02x\n", state);
+	logerror("mpc_int7_w: %02x\n", state);
 	m_cpu->set_input_line_and_vector(0, state ? ASSERT_LINE : CLEAR_LINE, 0xff); // Z80 INT7
 }
 
-void xbdcomm_device::dma_reg_w(offs_t offset, uint8_t data)
-{
-	m_dma_reg[offset] = data;
-	logerror("dma_reg_w: %02x %02x\n", offset, data);
-	update_dma();
-}
-
-void xbdcomm_device::update_dma()
-{
-	// check if both channels are active to begin with
-	if ((m_dma_reg[0x03] & 0x80) && (m_dma_reg[0x07] & 0x80))
-	{
-		int rx_dma_config = (m_dma_reg[0x02] << 16) | (m_dma_reg[0x01] << 8) | m_dma_reg[0x00];
-		int tx_dma_config = (m_dma_reg[0x06] << 16) | (m_dma_reg[0x05] << 8) | m_dma_reg[0x04];
-
-		if (rx_dma_config && tx_dma_config)
-		{
-			int rx_size = (dma_mem_r(rx_dma_config + 1) << 8) | dma_mem_r(rx_dma_config);
-			int tx_size = (dma_mem_r(tx_dma_config + 1) << 8) | dma_mem_r(tx_dma_config);
-
-			if (rx_size == tx_size)
-			{
-				int rx_addr = (dma_mem_r(rx_dma_config + 4) << 16) | (dma_mem_r(rx_dma_config + 3) << 8) | dma_mem_r(rx_dma_config + 2);
-				int tx_addr = (dma_mem_r(tx_dma_config + 4) << 16) | (dma_mem_r(tx_dma_config + 3) << 8) | dma_mem_r(tx_dma_config + 2);
-
-				int rx_flag = dma_mem_r(rx_dma_config + 5);
-				int tx_flag = dma_mem_r(tx_dma_config + 5);
-
-				for (int i = 0 ; i < rx_size ; i++)
-				{
-					dma_mem_w(rx_addr + i, dma_mem_r(tx_addr + i));
-				}
-
-				rx_flag |= 0x60;
-				tx_flag |= 0x60;
-
-				dma_mem_w(rx_dma_config + 5, rx_flag);
-				dma_mem_w(tx_dma_config + 5, tx_flag);
-				logerror("dma magic: size %04x from %04x to %04x\n", rx_size, tx_addr, rx_addr);
-
-				if (rx_flag & 0x10)
-				{
-					m_dma_reg[0x00] = dma_mem_r(rx_dma_config + 9);
-					m_dma_reg[0x01] = dma_mem_r(rx_dma_config + 10);
-					m_dma_reg[0x02] = dma_mem_r(rx_dma_config + 11);
-				}
-				if (tx_flag & 0x10)
-				{
-					m_dma_reg[0x04] = dma_mem_r(tx_dma_config + 9);
-					m_dma_reg[0x05] = dma_mem_r(tx_dma_config + 10);
-					m_dma_reg[0x06] = dma_mem_r(tx_dma_config + 11);
-				}
-
-				if ((rx_flag & 0x10) && (tx_flag & 0x10))
-				{
-					update_dma();
-				}
-			}
-			else
-			{
-				logerror("rx size != tx size\n");
-			}
-		}
-	}
-}
-
-uint8_t xbdcomm_device::dma_mem_r(offs_t offset)
+uint8_t xbdcomm_device::mpc_mem_r(offs_t offset)
 {
 	return m_cpu->space(AS_PROGRAM).read_byte(offset);
 }
 
-void xbdcomm_device::dma_mem_w(offs_t offset, uint8_t data)
+void xbdcomm_device::mpc_mem_w(offs_t offset, uint8_t data)
 {
 	m_cpu->space(AS_PROGRAM).write_byte(offset, data);
 }
@@ -357,12 +302,14 @@ void xbdcomm_device::z80_debug_w(uint8_t data)
 	m_z80_stat = 0;
 }
 
+
+#ifdef XBDCOMM_SIMULATION
 void xbdcomm_device::comm_tick()
 {
 	if (m_linkenable == 0x01)
 	{
-		uint8_t cabIdx = dma_mem_r(0x4000);
-		uint8_t cabCnt = dma_mem_r(0x4001);
+		uint8_t cabIdx = mpc_mem_r(0x4000);
+		uint8_t cabCnt = mpc_mem_r(0x4001);
 
 		int frameStartTx = 0x4010;
 		int frameStartRx = 0x4310;
@@ -540,7 +487,7 @@ void xbdcomm_device::comm_tick()
 					frameOffset = frameStartTx + ((idx - 1) * frameSize);
 					for (int j = 0x00 ; j < frameSize ; j++)
 					{
-						dma_mem_w(frameOffset + j, m_buffer0[1 + j]);
+						mpc_mem_w(frameOffset + j, m_buffer0[1 + j]);
 					}
 
 					// if not own message
@@ -562,9 +509,8 @@ void xbdcomm_device::comm_tick()
 			// update buffers... guesswork
 			for (int j = 0x00 ; j < 0x300 ; j++)
 			{
-				dma_mem_w(frameStartRx + j, dma_mem_r(frameStartTx + j));
+				mpc_mem_w(frameStartRx + j, mpc_mem_r(frameStartTx + j));
 			}
-
 
 			// update "ring buffer" if link established
 			// live relay does not send data
@@ -642,7 +588,7 @@ void xbdcomm_device::send_data(uint8_t frameType, int frameOffset, int frameSize
 	m_buffer0[0] = frameType;
 	for (int i = 0x00 ; i < frameSize ; i++)
 	{
-		m_buffer0[1 + i] = dma_mem_r(frameOffset + i);
+		m_buffer0[1 + i] = mpc_mem_r(frameOffset + i);
 	}
 	send_frame(dataSize);
 }
@@ -670,3 +616,4 @@ void xbdcomm_device::send_frame(int dataSize){
 		}
 	}
 }
+#endif

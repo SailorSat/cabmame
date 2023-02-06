@@ -16,7 +16,7 @@ Notes:
       Z80 - Clock 8.000MHz [16/2]
      5563 - Toshiba TC5563APL-12L 8kBx8-bit SRAM
    MB8421 - Fujitsu 2kBx8-bit Dual-Port SRAM (SDIP52)
-  MB89372 - Fujitsu Multi-Protocol Controller
+  MB89372 - Fujitsu Multi-Protocol Controller (SDIP64)
             Uses 3 serial data transfer protocols: ASYNC, COP & BOP. Has a built
             in DMA controller and Interrupt controller to handle interrupts
             from the serial interface unit (SIU) & DMA controller (DMAC)
@@ -79,8 +79,8 @@ static INPUT_PORTS_START( ybdcomm )
 	PORT_DIPSETTING(    0x0f, "15 (invalid)" )
 
 	PORT_DIPNAME( 0xf0, 0x10, "Cabinet Count" )
-	PORT_DIPSETTING(    0x00, "0" )
-	PORT_DIPSETTING(    0x10, "1" )
+	PORT_DIPSETTING(    0x00, "0 (invalid)" )
+	PORT_DIPSETTING(    0x10, "1 (invalid)" )
 	PORT_DIPSETTING(    0x20, "2" )
 	PORT_DIPSETTING(    0x30, "3" )
 	PORT_DIPSETTING(    0x40, "4" )
@@ -275,7 +275,7 @@ void ybdcomm_device::ex_w(offs_t offset, uint8_t data)
 					m_linkid = 0x00;
 					m_linkalive = 0x00;
 					m_linkcount = 0x00;
-					m_linktimer = 0x003a; // 58 fps
+					m_linktimer = 0x003a;
 
 					// read dips and write to shared memory
 					uint8_t sw1 = ioport("Link_SW1")->read();

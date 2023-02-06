@@ -10,6 +10,7 @@
 #include "osdfile.h"
 #include "cpu/z80/z80.h"
 #include "machine/mb8421.h"
+#include "machine/mb89372.h"
 
 
 //**************************************************************************
@@ -43,15 +44,16 @@ protected:
 private:
 	required_device<z80_device> m_cpu;
 	required_device<mb8421_device> m_dpram;
+	required_device<mb89372_device> m_mpc;
 
+	// MB8421
 	DECLARE_WRITE_LINE_MEMBER(dpram_int5_w);
-	DECLARE_WRITE_LINE_MEMBER(dlc_int7_w);
 
-	uint8_t m_dma_reg[0x8]{}; // probably more
-	void dma_reg_w(offs_t offset, uint8_t data);
-	void update_dma();
-	uint8_t dma_mem_r(offs_t offset);
-	void dma_mem_w(offs_t offset, uint8_t data);
+	// MB89372
+	DECLARE_WRITE_LINE_MEMBER(mpc_hreq_w);
+	DECLARE_WRITE_LINE_MEMBER(mpc_int7_w);
+	uint8_t mpc_mem_r(offs_t offset);
+	void mpc_mem_w(offs_t offset, uint8_t data);
 
 	uint8_t m_ex_page = 0; // 74LS374 probably
 
@@ -60,8 +62,10 @@ private:
 
 	uint8_t z80_stat_r();
 	void z80_stat_w(uint8_t data);
-
 	void z80_debug_w(uint8_t data);
+
+#ifdef XBDCOMM_SIMULATION
+	TIMER_CALLBACK_MEMBER(tick_timer);
 
 	osd_file::ptr m_line_rx; // rx line - can be either differential, simple serial or toslink
 	osd_file::ptr m_line_tx; // tx line - is differential, simple serial and toslink
@@ -80,6 +84,7 @@ private:
 	int read_frame(int dataSize);
 	void send_data(uint8_t frameType, int frameOffset, int frameSize, int dataSize);
 	void send_frame(int dataSize);
+#endif
 };
 
 // device type definition

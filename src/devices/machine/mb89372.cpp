@@ -225,6 +225,24 @@ void mb89372_device::write(offs_t offset, uint8_t data)
 {
 	switch (offset & 0x3f)
 	{
+		case 0x20:
+		case 0x21:
+		case 0x22:
+			// dma A desc pointer
+		case 0x23:
+			// dma A command register?
+			m_reg[offset & 0x3f] = data;
+			break;
+
+		case 0x24:
+		case 0x25:
+		case 0x26:
+			// dma B desc pointer
+		case 0x27:
+			// dma B command register?
+			m_reg[offset & 0x3f] = data;
+			break;
+
 		default:
 			m_reg[offset & 0x3f] = data;
 			logerror("MB89372 unimplemented register write @%02X = %02X\n", offset, data);

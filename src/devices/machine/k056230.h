@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include "osdfile.h"
+
 class k056230_device : public device_t
 {
 public:
@@ -34,6 +36,24 @@ protected:
 	devcb_write_line m_irq_cb;
 	int m_irq_state;
 	u8 m_ctrl_reg;
+
+private:
+	osd_file::ptr m_line_rx; // "fake" RX line, real hardware is half-duplex
+	osd_file::ptr m_line_tx; // "fake" TX line, real hardware is half-duplex
+	char m_localhost[256]{};
+	char m_remotehost[256]{};
+	u8 m_buffer0[0x201]{};
+	u8 m_buffer1[0x201]{};
+	u8 m_linkenable = 0;
+	u8 m_linkid = 0;
+	u8 m_status = 0;
+	u8 m_txmode = 0;
+
+	void set_mode(u8 data);
+	void set_ctrl(u8 data);
+	void comm_tick();
+	int read_frame(int dataSize);
+	void send_frame(int dataSize);
 };
 
 

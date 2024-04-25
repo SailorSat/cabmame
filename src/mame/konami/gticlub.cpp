@@ -314,7 +314,7 @@ private:
 	optional_shared_ptr_array<uint32_t, 2> m_sharc_dataram;
 	optional_ioport_array<4> m_analog;
 	required_ioport_array<4> m_ports;
-	output_finder<2> m_pcb_digit;
+	output_finder<3> m_pcb_digit;
 	memory_view m_cg_view;
 
 	void paletteram32_w(offs_t offset, uint32_t data, uint32_t mem_mask = ~0);
@@ -397,6 +397,10 @@ void gticlub_state::sysreg_w(offs_t offset, uint8_t data)
 		case 0:
 		case 1:
 			m_pcb_digit[offset] = bitswap<7>(~data,0,1,2,3,4,5,6);
+			break;
+
+		case 2:
+			m_pcb_digit[offset] = data;
 			break;
 
 		case 3:

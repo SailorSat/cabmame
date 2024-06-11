@@ -49,8 +49,8 @@ private:
 	uint32_t m88110b_r(offs_t offset, uint32_t mem_mask);
 	void m88110b_w(offs_t offset, uint32_t data, uint32_t mem_mask);
 
-	uint8_t m_fifo_pos;
-	uint8_t m_fifo_end;
+	uint16_t m_fifo_pos;
+	uint16_t m_fifo_end;
 
 	uint8_t m_proc_reg0;
 	uint8_t m_proc_reg1;

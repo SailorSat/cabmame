@@ -107,7 +107,7 @@ uint8_t enet16_device::isa_port_r(offs_t offset)
 			// offset 0x00 to 0x07 read FF
 			return 0xff;
 		case 1:
-			// offset 0x07 to 0x0F read PROM
+			// offset 0x08 to 0x0F read PROM
 			return m_prom[offset & 7];
 		case 2:
 		case 3:

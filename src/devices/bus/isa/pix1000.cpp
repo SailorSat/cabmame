@@ -187,7 +187,7 @@ void pix1000_device::isa_mem_w(offs_t offset, uint8_t data)
 		}
 	}
 
-	logerror("pix1000: unhandled mem write @ %02x / %08x, %02x\n", offset, address, data);
+	logerror("pix1000: unhandled mem write @ %02x / %08x, %02x - r0=%02\n", offset, address, data, m_proc_reg0);
 }
 
 /*************************************************************
@@ -238,15 +238,15 @@ void pix1000_device::m88110b_w(offs_t offset, uint32_t data, uint32_t mem_mask)
 
 void pix1000_device::fifo_push(uint16_t data)
 {
-	if (m_fifo_end >= 0x800) return;
 	m_fifo[m_fifo_end++] = data;
+	if (m_fifo_end >= 0x400) m_fifo_end &= 0x3ff;
 }
 
 uint16_t pix1000_device::fifo_pop()
 {
 	uint16_t ret = 0;
 	if (m_fifo_pos < m_fifo_end) ret = m_fifo[m_fifo_pos++];
-	if (m_fifo_pos == m_fifo_end) {
+	if (m_fifo_pos >= m_fifo_end) {
 		m_fifo_pos = 0;
 		m_fifo_end = 0;
 	}

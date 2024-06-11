@@ -26,6 +26,9 @@ protected:
 	required_device<screen_device> m_screen_a;
 	required_device<screen_device> m_screen_b;
 
+	memory_share_creator<uint8_t> m_sram;
+	memory_share_creator<uint16_t> m_fifo;
+
 	virtual void device_add_mconfig(machine_config &config) override;
 
 private:

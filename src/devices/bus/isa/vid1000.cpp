@@ -33,7 +33,6 @@ void vid1000_device::device_add_mconfig(machine_config &config)
 	m_screen_a->set_raw(27_MHz_XTAL, 864, 0, 720, 625, 0, 576);
 	m_screen_a->set_screen_update(FUNC(vid1000_device::screen_update_a));
 
-
 	SCREEN(config, m_screen_b, SCREEN_TYPE_RASTER);
 	m_screen_b->set_raw(27_MHz_XTAL, 864, 0, 720, 625, 0, 576);
 	m_screen_b->set_screen_update(FUNC(vid1000_device::screen_update_b));
@@ -43,7 +42,9 @@ vid1000_device::vid1000_device(const machine_config& mconfig, const char* tag, d
 	: device_t(mconfig, ISA16_VID1000, tag, owner, clock),
 	device_isa16_card_interface(mconfig, *this),
 	m_screen_a(*this, "vid1000_a"),
-	m_screen_b(*this, "vid1000_b")
+	m_screen_b(*this, "vid1000_b"),
+	m_sram(*this, "sram", 0x2800U, ENDIANNESS_LITTLE),
+	m_fifo(*this, "fifo", 0x800U, ENDIANNESS_LITTLE)
 {
 }
 

@@ -22,6 +22,8 @@ protected:
 	virtual void device_start() override;
 	virtual void device_reset() override;
 
+	memory_share_creator<uint8_t> m_ram;
+
 	virtual void device_add_mconfig(machine_config &config) override;
 	virtual ioport_constructor device_input_ports() const override;
 
@@ -36,7 +38,6 @@ private:
 
 	required_device<dp8390d_device> m_dp8390;
 	uint8_t m_irq;
-	uint8_t m_ram[16*1024];
 	uint8_t m_prom[32];
 };
 

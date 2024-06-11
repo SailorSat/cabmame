@@ -44,6 +44,7 @@ void enet16_device::device_add_mconfig(machine_config &config)
 enet16_device::enet16_device(const machine_config& mconfig, const char* tag, device_t* owner, uint32_t clock)
 	: device_t(mconfig, ISA16_ENET16, tag, owner, clock),
 	device_isa16_card_interface(mconfig, *this),
+	m_ram(*this, "sram", 0x2000U * 2, ENDIANNESS_LITTLE),
 	m_dp8390(*this, "dp8390d"),
 	m_irq(0)
 {

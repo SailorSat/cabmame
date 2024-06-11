@@ -13,7 +13,7 @@ Notes:
   2x  MC88110       - Motorola 88110 CPU
   16x TC528257SZ    - Toshiba 256Kx8 VRAM
   16x TC514400AZ    - Toshiba 1Mx4 DRAM
-  2x AM7203A        - 2Kx9 FIFO
+  2x  AM7203A       - 2Kx9 FIFO
 
   OSC 40.0MHz
 
@@ -52,7 +52,10 @@ void pix1000_device::device_add_mconfig(machine_config &config)
 
 pix1000_device::pix1000_device(const machine_config& mconfig, const char* tag, device_t* owner, uint32_t clock)
 	: device_t(mconfig, ISA16_PIX1000, tag, owner, clock),
-	device_isa16_card_interface(mconfig, *this)
+	device_isa16_card_interface(mconfig, *this),
+	m_pix_dram(*this, "pix_dram", 0x800000U, ENDIANNESS_LITTLE),
+	m_pix_vram(*this, "pix_vram", 0x400000U, ENDIANNESS_LITTLE),
+	m_fifo(*this, "fifo", 0x800U, ENDIANNESS_LITTLE)
 	//m_m88110a(*this, "m88110a"),
 	//m_m88110a(*this, "m88110b")
 {
@@ -67,8 +70,6 @@ void pix1000_device::device_reset()
 {
 	map_io();
 	map_ram();
-
-	memset(m_fifo, 0, 2*PIX_FIFOSIZE);
 
 	m_fifo_pos = 0;
 	m_fifo_end = 0;
@@ -237,7 +238,7 @@ void pix1000_device::m88110b_w(offs_t offset, uint32_t data, uint32_t mem_mask)
 
 void pix1000_device::fifo_push(uint16_t data)
 {
-	if (m_fifo_end >= PIX_FIFOSIZE) return;
+	if (m_fifo_end >= 0x800) return;
 	m_fifo[m_fifo_end++] = data;
 }
 

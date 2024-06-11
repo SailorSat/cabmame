@@ -168,6 +168,9 @@ void formatc_device::device_add_mconfig(machine_config &config)
 formatc_device::formatc_device(const machine_config& mconfig, const char* tag, device_t* owner, uint32_t clock)
 	: device_t(mconfig, ISA16_FORMATC, tag, owner, clock),
 	device_isa16_card_interface(mconfig, *this),
+	m_sscape_ram0(*this, "sscape_ram0", 0x020000U, ENDIANNESS_LITTLE),
+	m_sscape_simm(*this, "sscape_simm", 0x400000U, ENDIANNESS_LITTLE),
+	m_ctrl_ram(*this, "ctrl_ram", 0x0800U, ENDIANNESS_LITTLE),
 	m_m68000(*this, "m68000"),
 	m_es5506(*this, "es5506"),
 	m_mcd(*this, "mcd"),
@@ -197,8 +200,6 @@ void formatc_device::device_reset()
 
 	m_odie_dma_address[0] = 0;
 	m_odie_dma_address[1] = 0;
-
-	memset(m_sscape_ram0, 0, 64 * 1024);
 }
 
 void formatc_device::device_reset_after_children()
@@ -422,7 +423,7 @@ void formatc_device::isa_odie_w(offs_t offset, uint8_t data)
 void formatc_device::sscape_map(address_map &map)
 {
 	map(0x000000, 0x3fffff).rw(FUNC(formatc_device::sscape_ram0_r), FUNC(formatc_device::sscape_ram0_w)); // RAM0
-	map(0x400000, 0x7fffff).ram(); // BANK* - selectable
+	map(0x400000, 0x7fffff).rw(FUNC(formatc_device::sscape_ram1_r), FUNC(formatc_device::sscape_ram1_w)); // BANK* - selectable
 	map(0x800000, 0x9fffff).rw(m_es5506, FUNC(es5506_device::read), FUNC(es5506_device::write)); // OTTO
 	map(0xa00000, 0xbfffff).rw(FUNC(formatc_device::sscape_odie_r), FUNC(formatc_device::sscape_odie_w)); // ODIE
 	map(0xc00000, 0xffffff).rw(FUNC(formatc_device::sscape_ram3_r), FUNC(formatc_device::sscape_ram3_w)); // RAM* - selectable

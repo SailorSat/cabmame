@@ -9,8 +9,6 @@
 //#include "cpu/m88000/m88000.h"
 
 #define PIX_CLOCK       XTAL(40'000'000)
-#define PIX_FIFOSIZE    2048
-#define PIX_DRAMSIZE    8*1024*1024
 
 class pix1000_device: public device_t, public device_isa16_card_interface
 {
@@ -32,6 +30,10 @@ protected:
 	virtual void device_reset() override;
 	virtual void device_reset_after_children() override;
 
+	memory_share_creator<uint8_t> m_pix_dram;
+	memory_share_creator<uint8_t> m_pix_vram;
+	memory_share_creator<uint16_t> m_fifo;
+
 	virtual void device_add_mconfig(machine_config &config) override;
 	virtual ioport_constructor device_input_ports() const override;
 
@@ -42,14 +44,11 @@ private:
 	//required_device<mc88100_device> m_m88110a;
 	//required_device<mc88100_device> m_m88110b;
 
-	uint8_t m_pix_dram[PIX_DRAMSIZE];
-
 	uint32_t m88110a_r(offs_t offset, uint32_t mem_mask);
 	void m88110a_w(offs_t offset, uint32_t data, uint32_t mem_mask);
 	uint32_t m88110b_r(offs_t offset, uint32_t mem_mask);
 	void m88110b_w(offs_t offset, uint32_t data, uint32_t mem_mask);
 
-	uint16_t m_fifo[PIX_FIFOSIZE];
 	uint8_t m_fifo_pos;
 	uint8_t m_fifo_end;
 

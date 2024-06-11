@@ -37,6 +37,10 @@ protected:
 	virtual void device_reset() override;
 	virtual void device_reset_after_children() override;
 
+	memory_share_creator<uint8_t> m_sscape_ram0;
+	memory_share_creator<uint8_t> m_sscape_simm;
+	memory_share_creator<uint8_t> m_ctrl_ram;
+
 	virtual void device_add_mconfig(machine_config &config) override;
 	virtual ioport_constructor device_input_ports() const override;
 	virtual const tiny_rom_entry *device_rom_region() const override;
@@ -50,7 +54,6 @@ private:
 	void map_dma();
 	void map_ram();
 
-	uint8_t m_sscape_ram0[2*64*1024];
 	uint8_t sscape_ram0_r(offs_t offset);
 	void sscape_ram0_w(offs_t offset, uint8_t data);
 	uint8_t sscape_ram1_r(offs_t offset);
@@ -89,8 +92,6 @@ private:
 
 	uint8_t m_odie_regs[0x30];
 	uint8_t m_odie_page;
-
-	uint8_t m_ctrl_ram[2*1024];
 
 	uint8_t mcd_r(offs_t offset);
 	void mcd_w(offs_t offset, uint8_t data);

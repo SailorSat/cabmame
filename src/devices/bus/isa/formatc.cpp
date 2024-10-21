@@ -189,8 +189,9 @@ void formatc_device::device_reset()
 	map_ram();
 	map_dma();
 
-	m_odie_page = 0;
 	memset(m_odie_regs, 0, 0x30);
+	m_odie_page = 0;
+	m_odie_bank = 0;
 
 	m_isa->drq1_w(CLEAR_LINE);
 	m_isa->drq3_w(CLEAR_LINE);
@@ -287,7 +288,7 @@ void formatc_device::dack_w(int line, uint8_t data)
 
 	// TODO - write data to actual sscape memory
 	logerror("formatc: ISA - handled DMA %u write @ %06x : %02x\n", line, m_odie_dma_address[which], data);
-	m_sscape_ram0[m_odie_dma_address[which]] = data;
+	m_sscape_ram0[m_odie_dma_address[which]^1] = data;
 	m_odie_dma_address[which]++;
 }
 
@@ -349,22 +350,22 @@ uint8_t formatc_device::isa_odie_r(offs_t offset)
 	switch (offset) {
 		case 0:
 			// MIDI Interface Emulation Control/Status
-			return odie_reg_r(MIDI_IF_EMU_CTRL_STAT);
+			return odie_reg_r(0, MIDI_IF_EMU_CTRL_STAT);
 		case 1:
 			// MIDI Interface Emulation Data
-			return odie_reg_r(MIDI_IF_EMU_DATA);
+			return odie_reg_r(0, MIDI_IF_EMU_DATA);
 		case 2:
 			// HOST Interface Control/Status
-			return odie_reg_r(HOST_IF_CTRL_STAT);
+			return odie_reg_r(0, HOST_IF_CTRL_STAT);
 		case 3:
 			// HOST Interface Data
-			return odie_reg_r(HOST_IF_DATA);
+			return odie_reg_r(0, HOST_IF_DATA);
 		case 4:
 			// ODIE internal address
 			return m_odie_page;
 		case 5:
 			// ODIE internal data
-			return odie_reg_r(0x20 | m_odie_page);
+			return odie_reg_r(0, 0x20 | m_odie_page);
 	}
 
 	// CD-ROM Interface Mode-0 - +6 to +7
@@ -384,19 +385,19 @@ void formatc_device::isa_odie_w(offs_t offset, uint8_t data)
 	switch (offset) {
 		case 0x0:
 			// MIDI Interface Emulation Control/Status
-			odie_reg_w(MIDI_IF_EMU_CTRL_STAT, data);
+			odie_reg_w(0, MIDI_IF_EMU_CTRL_STAT, data);
 			return;
 		case 0x1:
 			// MIDI Interface Emulation Data
-			odie_reg_w(MIDI_IF_EMU_DATA, data);
+			odie_reg_w(0, MIDI_IF_EMU_DATA, data);
 			return;
 		case 0x2:
 			// HOST Interface Control/Status
-			odie_reg_w(HOST_IF_CTRL_STAT, data);
+			odie_reg_w(0, HOST_IF_CTRL_STAT, data);
 			return;
 		case 0x3:
 			// HOST Interface Data
-			odie_reg_w(HOST_IF_DATA, data);
+			odie_reg_w(0, HOST_IF_DATA, data);
 			return;
 		case 0x4:
 			// ODIE internal address
@@ -404,7 +405,7 @@ void formatc_device::isa_odie_w(offs_t offset, uint8_t data)
 			return;
 		case 0x5:
 			// ODIE internal data
-			odie_reg_w(0x20 | m_odie_page, data);
+			odie_reg_w(0, 0x20 | m_odie_page, data);
 			return;
 	}
 
@@ -432,7 +433,7 @@ void formatc_device::sscape_map(address_map &map)
 uint8_t formatc_device::sscape_ram0_r(offs_t offset)
 {
 	if (offset < 0x20000)
-		return m_sscape_ram0[offset & 0x1ffff];
+		return m_sscape_ram0[offset];
 	logerror("formatc: 68K - unhandled RAM0 read @ %02x\n", offset);
 	return 0xff;
 }
@@ -442,30 +443,50 @@ void formatc_device::sscape_ram0_w(offs_t offset, uint8_t data)
 	if (offset < 0x20000)
 	{
 		m_sscape_ram0[offset] = data;
+		return;
 	}
 	logerror("formatc: 68K - unhandled RAM0 write @ %02x, %02x\n", offset, data);
 }
 
 uint8_t formatc_device::sscape_ram1_r(offs_t offset)
 {
+	switch (m_odie_bank) {
+		case 0:
+			return sscape_ram0_r(offset & 0x1ffff);
+			break;
+
+		case 1:
+			return m_sscape_simm[offset & 0x3fffff];
+			break;
+	}
 	logerror("formatc: 68K - unhandled RAM1 read @ %02x\n", offset);
 	return 0xff;
 }
 
 void formatc_device::sscape_ram1_w(offs_t offset, uint8_t data)
 {
+	switch (m_odie_bank) {
+		case 0:
+			sscape_ram0_w(offset & 0x1ffff, data);
+			return;
+
+		case 1:
+			m_sscape_simm[offset & 0x3fffff] = data;
+			return;
+	}
 	logerror("formatc: 68K - unhandled RAM1 write @ %02x, %02x\n", offset, data);
 }
 
 uint8_t formatc_device::sscape_ram3_r(offs_t offset)
 {
-	logerror("formatc: 68K - unhandled RAM3 read @ %02x\n", offset);
-	return 0xff;
+	// ODIE documentation states that Segment 3 usually points to memory device 0.
+	return sscape_ram0_r(offset & 0x1ffff);
 }
 
 void formatc_device::sscape_ram3_w(offs_t offset, uint8_t data)
 {
-	logerror("formatc: 68K - unhandled RAM3 write @ %02x, %02x\n", offset, data);
+	// ODIE documentation states that Segment 3 usually points to memory device 0.
+	sscape_ram0_w(offset & 0x1ffff, data);
 }
 
 uint8_t formatc_device::sscape_otto_r(offs_t offset)
@@ -481,15 +502,15 @@ void formatc_device::sscape_otto_w(offs_t offset, uint8_t data)
 
 uint8_t formatc_device::sscape_odie_r(offs_t offset)
 {
-	return odie_reg_r(offset);
+	return odie_reg_r(1, offset);
 }
 
 void formatc_device::sscape_odie_w(offs_t offset, uint8_t data)
 {
-	odie_reg_w(offset, data);
+	odie_reg_w(1, offset, data);
 }
 
-uint8_t formatc_device::odie_reg_r(offs_t offset)
+uint8_t formatc_device::odie_reg_r(uint8_t source, offs_t offset)
 {
 	uint8_t result = m_odie_regs[offset];
 
@@ -508,16 +529,20 @@ uint8_t formatc_device::odie_reg_r(offs_t offset)
 			break;
 	}
 
-	logerror("formatc: ODIE register read %02x = %02x\n", offset, result);
+	logerror("formatc: %1x - ODIE register read %02x = %02x\n", source, offset, result);
 	return result;
 }
 
-void formatc_device::odie_reg_w(offs_t offset, uint8_t data)
+void formatc_device::odie_reg_w(uint8_t source, offs_t offset, uint8_t data)
 {
 	uint8_t changed = m_odie_regs[offset] ^ data;
 	m_odie_regs[offset] = data;
 
 	switch (offset) {
+		case MISC_CTRL:
+			m_odie_bank = data & 3;
+			break;
+
 		case OBP_MISC_STAT:
 		case HOST_INT_STAT:
 			// read only register
@@ -534,7 +559,7 @@ void formatc_device::odie_reg_w(offs_t offset, uint8_t data)
 			break;
 	}
 
-	logerror("formatc: ODIE register write %02x = %02x\n", offset, data);
+	logerror("formatc: %1x - ODIE register write %02x = %02x\n", source, offset, data);
 }
 
 void formatc_device::trigger_odie_dma(int which)

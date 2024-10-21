@@ -87,11 +87,12 @@ private:
 	required_device<mcd2_device> m_mcd;
 	required_device<i8x9x_device> m_i80198;
 
-	uint8_t odie_reg_r(offs_t offset);
-	void odie_reg_w(offs_t offset, uint8_t data);
+	uint8_t odie_reg_r(uint8_t source, offs_t offset);
+	void odie_reg_w(uint8_t source, offs_t offset, uint8_t data);
 
 	uint8_t m_odie_regs[0x30];
 	uint8_t m_odie_page;
+	uint8_t m_odie_bank;
 
 	uint8_t mcd_r(offs_t offset);
 	void mcd_w(offs_t offset, uint8_t data);

@@ -16,6 +16,7 @@
 #include "namcomcu.h"
 #include "machine/timer.h"
 #include "sound/c352.h"
+#include "namco_c139.h"
 #include "video/rgbutil.h"
 #include "video/poly.h"
 
@@ -208,6 +209,7 @@ public:
 		m_eeprom(*this, "eeprom"),
 		m_mb87078(*this, "mb87078"),
 		m_c352(*this, "c352"),
+		m_sci(*this, "sci"),
 		m_shareram(*this, "shareram"),
 		m_slave_extram(*this, "slaveextram"),
 		m_master_extram(*this, "masterextram"),
@@ -421,6 +423,7 @@ protected:
 	required_device<eeprom_parallel_28xx_device> m_eeprom;
 	optional_device<mb87078_device> m_mb87078;
 	required_device<c352_device> m_c352;
+	required_device<namco_c139_device> m_sci;
 	required_shared_ptr<u16> m_shareram;
 	required_shared_ptr<u16> m_slave_extram;
 	required_shared_ptr<u16> m_master_extram;

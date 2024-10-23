@@ -228,6 +228,7 @@ enum
 
 	int get_pos_irq_scanline() { return (m_c116->get_reg(5) - 32) & 0xff; }
 	TIMER_DEVICE_CALLBACK_MEMBER(screen_scanline);
+	DECLARE_WRITE_LINE_MEMBER(sci_int_w);
 
 	required_shared_ptr<uint8_t> m_dpram; /* 2Kx8 */
 	optional_shared_ptr<uint16_t> m_spriteram;

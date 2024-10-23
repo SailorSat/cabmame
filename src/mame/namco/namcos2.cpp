@@ -1711,6 +1711,7 @@ void namcos2_state::configure_common_standard(machine_config &config)
 	NVRAM(config, "nvram", nvram_device::DEFAULT_ALL_1);
 
 	NAMCO_C139(config, m_sci, 0);
+	m_sci->irq_cb().set(FUNC(namcos2_state::sci_int_w));
 
 	SCREEN(config, m_screen, SCREEN_TYPE_RASTER);
 	m_screen->set_raw(MAIN_OSC_CLOCK/8, 384, 0*8, 36*8, 264, 0*8, 28*8);
@@ -1730,6 +1731,11 @@ TIMER_DEVICE_CALLBACK_MEMBER(namcos2_state::screen_scanline)
 	int scanline = param;
 	int cur_posirq = get_pos_irq_scanline();
 
+	if (scanline == 120)
+	{
+		m_sci->check_rx();
+	}
+
 	if (scanline == 200) // triggering this a bit before Vblank allows the Assault Plus mode select screen to work without overclocking the IO MCU, exact timings unknown.
 	{
 		if (m_c65)
@@ -1743,7 +1749,7 @@ TIMER_DEVICE_CALLBACK_MEMBER(namcos2_state::screen_scanline)
 	{
 		m_master_intc->vblank_irq_trigger();
 		m_slave_intc->vblank_irq_trigger();
-
+		m_sci->vblank_irq_trigger();
 	}
 
 	if(scanline == cur_posirq)
@@ -1753,6 +1759,12 @@ TIMER_DEVICE_CALLBACK_MEMBER(namcos2_state::screen_scanline)
 		// TODO: should be when video registers are updated (and/or latched) but that makes things worse
 		m_screen->update_partial(m_update_to_line_before_posirq ? param-1 : param);
 	}
+}
+
+WRITE_LINE_MEMBER(namcos2_state::sci_int_w)
+{
+	m_master_intc->sci_irq_trigger();
+	m_slave_intc->sci_irq_trigger();
 }
 
 void namcos2_state::configure_c123tmap_standard(machine_config &config)

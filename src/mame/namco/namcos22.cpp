@@ -1160,6 +1160,39 @@ void namcos22_state::namcos22_sci_w(offs_t offset, u16 data)
 {
 }
 
+WRITE_LINE_MEMBER(namcos22_state::sci_int_w)
+{
+	logerror("sci_int_w: %02x\n", state);
+	int line = 0x04;
+	if (m_irq_enabled & line)
+	{
+		m_irq_state |= line;
+		m_maincpu->set_input_line(m_syscontrol[2] & 7, ASSERT_LINE); // SCI IRQ
+	}
+}
+
+/*
+    Use the screen scanline to trigger comms handling multiple times per framew
+*/
+TIMER_DEVICE_CALLBACK_MEMBER(namcos22_state::screen_scanline)
+{
+	int scanline = param;
+
+	/*
+		We have to poll the transmissions, 
+		even if the sci registers haven't been set to send anything,
+		there may still be a need to pass on received data to the next PCB in the 'ring'
+	*/
+	if (scanline == 240)
+	{
+		m_sci->check_rx();
+	}
+
+	if (scanline == 480)
+	{
+		m_sci->vblank_irq_trigger();
+	}
+}
 
 // System Controller
 
@@ -3746,6 +3779,7 @@ void namcos22_state::namcos22(machine_config &config)
 	M68020(config, m_maincpu, 49.152_MHz_XTAL/2); // MC68020RP25E
 	m_maincpu->set_addrmap(AS_PROGRAM, &namcos22_state::namcos22_am);
 	m_maincpu->set_vblank_int("screen", FUNC(namcos22_state::namcos22_interrupt));
+	TIMER(config, "scantimer").configure_scanline(FUNC(namcos22s_state::screen_scanline), "screen", 0, 240);
 
 	tms32025_device& master(TMS32025(config, m_master, 40_MHz_XTAL));
 	master.set_addrmap(AS_PROGRAM, &namcos22_state::master_dsp_program);
@@ -3770,6 +3804,8 @@ void namcos22_state::namcos22(machine_config &config)
 	slave.dx_out_cb().set(FUNC(namcos22_state::slave_serial_io_w));
 
 	NAMCO_C139(config, m_sci, 0);
+	m_sci->irq_cb().set(FUNC(namcos22_state::sci_int_w));
+
 
 	NAMCO_C74(config, m_mcu, 49.152_MHz_XTAL/3); // C74 on the CPU board has no periodic interrupts, it runs entirely off Timer A0
 	m_mcu->set_addrmap(AS_PROGRAM, &namcos22_state::mcu_s22_program);

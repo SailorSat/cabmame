@@ -315,6 +315,8 @@ void m1comm_device::comm_tick()
 {
 	if (m_linkenable == 0x01)
 	{
+		std::error_condition filerr;
+
 		int frameStart = 0x0010;
 		int frameOffset = 0x0000;
 		int frameSize = 0x01c4;
@@ -342,7 +344,12 @@ void m1comm_device::comm_tick()
 			{
 				osd_printf_verbose("M1COMM: listen on %s\n", m_localhost);
 				uint64_t filesize; // unused
-				osd_file::open(m_localhost, OPEN_FLAG_CREATE, m_line_rx, filesize);
+				filerr = osd_file::open(m_localhost, OPEN_FLAG_CREATE, m_line_rx, filesize);
+				if (filerr.value() != 0)
+				{
+					osd_printf_verbose("M1COMM: rx connection failed\n");
+					m_line_rx.reset();
+				}
 			}
 
 			// check tx socket
@@ -350,7 +357,12 @@ void m1comm_device::comm_tick()
 			{
 				osd_printf_verbose("M1COMM: connect to %s\n", m_remotehost);
 				uint64_t filesize; // unused
-				osd_file::open(m_remotehost, 0, m_line_tx, filesize);
+				filerr = osd_file::open(m_remotehost, 0, m_line_tx, filesize);
+				if (filerr.value() != 0)
+				{
+					osd_printf_verbose("M1COMM: tx connection failed\n");
+					m_line_tx.reset();
+				}
 			}
 
 			// if both sockets are there check ring
@@ -581,26 +593,39 @@ int m1comm_device::read_frame(int dataSize)
 					togo -= recv;
 					offset += recv;
 				}
-				else if (!filerr && recv == 0)
+				switch (filerr.value())
 				{
-					togo = 0;
+					case 0x00:
+					case 0x8c:
+						// 00 - no error
+						// 8c - unknown error (read behind eof?)
+						break;
+
+					default:
+						togo = 0;
+						break;
 				}
 			}
 		}
 	}
-	else if (!filerr && recv == 0)
+	switch (filerr.value())
 	{
-		if (m_linkalive == 0x01)
-		{
+		case 0x00:
+		case 0x8c:
+			// 00 - no error
+			// 8c - unknown error (read behind eof?)
+			break;
+
+		default:
 			osd_printf_verbose("M1COMM: rx connection lost\n");
-			m_linkalive = 0x02;
-			m_linktimer = 0x00;
-
-			m_shared[0] = 0xff;
-
 			m_line_rx.reset();
-			m_line_tx.reset();
-		}
+			if (m_linkalive == 0x01)
+			{
+				m_linkalive = 0x02;
+				m_linktimer = 0x00;
+				m_shared[0] = 0xff;
+			}
+			break;
 	}
 	return recv;
 }
@@ -623,18 +648,15 @@ void m1comm_device::send_frame(int dataSize){
 	std::uint32_t written;
 
 	filerr = m_line_tx->write(&m_buffer0, 0, dataSize, written);
-	if (filerr)
+	if (filerr.value() != 0)
 	{
+		osd_printf_verbose("M1COMM: tx connection lost\n");
+		m_line_tx.reset();
 		if (m_linkalive == 0x01)
 		{
-			osd_printf_verbose("M1COMM: tx connection lost\n");
 			m_linkalive = 0x02;
 			m_linktimer = 0x00;
-
 			m_shared[0] = 0xff;
-
-			m_line_rx.reset();
-			m_line_tx.reset();
 		}
 	}
 }

@@ -197,12 +197,19 @@ void k056230_device::comm_tick()
 {
 	if (m_linkenable == 0x01)
 	{
+		std::error_condition filerr;
+
 		// check rx socket
 		if (!m_line_rx)
 		{
 			osd_printf_verbose("k056230: listen on %s\n", m_localhost);
 			uint64_t filesize; // unused
-			osd_file::open(m_localhost, OPEN_FLAG_CREATE, m_line_rx, filesize);
+			filerr = osd_file::open(m_localhost, OPEN_FLAG_CREATE, m_line_rx, filesize);
+			if (filerr.value() != 0)
+			{
+				osd_printf_verbose("k056230: rx connection failed\n");
+				m_line_rx.reset();
+			}
 		}
 
 		// check tx socket
@@ -210,7 +217,12 @@ void k056230_device::comm_tick()
 		{
 			osd_printf_verbose("k056230: connect to %s\n", m_remotehost);
 			uint64_t filesize; // unused
-			osd_file::open(m_remotehost, 0, m_line_tx, filesize);
+			filerr = osd_file::open(m_remotehost, 0, m_line_tx, filesize);
+			if (filerr.value() != 0)
+			{
+				osd_printf_verbose("k056230: tx connection failed\n");
+				m_line_tx.reset();
+			}
 		}
 
 		// if both sockets are there check ring
@@ -312,9 +324,17 @@ int k056230_device::read_frame(int dataSize)
 					togo -= recv;
 					offset += recv;
 				}
-				else if (filerr && filerr.value() != 0)
+				switch (filerr.value())
 				{
-					togo = 0;
+					case 0x00:
+					case 0x8c:
+						// 00 - no error
+						// 8c - unknown error (read behind eof?)
+						break;
+
+					default:
+						togo = 0;
+						break;
 				}
 			}
 		}
@@ -323,8 +343,10 @@ int k056230_device::read_frame(int dataSize)
 	{
 		case 0x00:
 		case 0x8c:
+			// 00 - no error
+			// 8c - unknown error (read behind eof?)
 			break;
-			
+
 		default:
 			osd_printf_verbose("k056230: rx connection lost %08x %s\n", filerr.value(), filerr.message());
 			m_line_rx.reset();
@@ -342,7 +364,7 @@ void k056230_device::send_frame(int dataSize)
 	std::uint32_t written;
 
 	filerr = m_line_tx->write(&m_buffer0, 0, dataSize, written);
-	if (filerr && filerr.value() != 0)
+	if (filerr.value() != 0)
 	{
 		osd_printf_verbose("k056230: tx connection lost %08x %s\n", filerr.value(), filerr.message());
 		m_line_tx.reset();

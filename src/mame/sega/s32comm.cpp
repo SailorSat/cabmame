@@ -287,22 +287,38 @@ int s32comm_device::read_frame(int dataSize)
 					togo -= recv;
 					offset += recv;
 				}
-				else if (!filerr && recv == 0)
+				switch (filerr.value())
 				{
-					togo = 0;
+					case 0x00:
+					case 0x8c:
+						// 00 - no error
+						// 8c - unknown error (read behind eof?)
+						break;
+
+					default:
+						togo = 0;
+						break;
 				}
 			}
 		}
 	}
-	else if (!filerr && recv == 0)
+	switch (filerr.value())
 	{
-		if (m_linkalive == 0x01)
-		{
+		case 0x00:
+		case 0x8c:
+			// 00 - no error
+			// 8c - unknown error (read behind eof?)
+			break;
+
+		default:
 			osd_printf_verbose("S32COMM: rx connection lost\n");
-			m_linkalive = 0x02;
-			m_linktimer = 0x00;
 			m_line_rx.reset();
-		}
+			if (m_linkalive == 0x01)
+			{
+				m_linkalive = 0x02;
+				m_linktimer = 0x00;
+			}
+			break;
 	}
 	return recv;
 }
@@ -326,14 +342,14 @@ void s32comm_device::send_frame(int dataSize){
 	std::uint32_t written;
 
 	filerr = m_line_tx->write(&m_buffer0, 0, dataSize, written);
-	if (filerr)
+	if (filerr.value() != 0)
 	{
+		osd_printf_verbose("S32COMM: tx connection lost\n");
+		m_line_tx.reset();
 		if (m_linkalive == 0x01)
 		{
-			osd_printf_verbose("S32COMM: tx connection lost\n");
 			m_linkalive = 0x02;
 			m_linktimer = 0x00;
-			m_line_tx.reset();
 		}
 	}
 }

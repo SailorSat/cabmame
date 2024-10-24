@@ -267,6 +267,8 @@ int s32comm_device::read_frame(int dataSize)
 	// try to read a message
 	std::uint32_t recv = 0;
 	std::error_condition filerr = m_line_rx->read(m_buffer0, 0, dataSize, recv);
+	if (filerr)
+		recv = 0;
 	if (recv > 0)
 	{
 		// check if message complete
@@ -287,38 +289,20 @@ int s32comm_device::read_frame(int dataSize)
 					togo -= recv;
 					offset += recv;
 				}
-				switch (filerr.value())
-				{
-					case 0x00:
-					case 0x8c:
-						// 00 - no error
-						// 8c - unknown error (read behind eof?)
-						break;
-
-					default:
-						togo = 0;
-						break;
-				}
+				if (filerr)
+					togo = 0;
 			}
 		}
 	}
-	switch (filerr.value())
+	if (filerr)
 	{
-		case 0x00:
-		case 0x8c:
-			// 00 - no error
-			// 8c - unknown error (read behind eof?)
-			break;
-
-		default:
-			osd_printf_verbose("S32COMM: rx connection lost\n");
-			m_line_rx.reset();
-			if (m_linkalive == 0x01)
-			{
-				m_linkalive = 0x02;
-				m_linktimer = 0x00;
-			}
-			break;
+		osd_printf_verbose("S32COMM: rx connection lost\n");
+		m_line_rx.reset();
+		if (m_linkalive == 0x01)
+		{
+			m_linkalive = 0x02;
+			m_linktimer = 0x00;
+		}
 	}
 	return recv;
 }
@@ -338,11 +322,9 @@ void s32comm_device::send_frame(int dataSize){
 	if (!m_line_tx)
 		return;
 
-	std::error_condition filerr;
 	std::uint32_t written;
-
-	filerr = m_line_tx->write(&m_buffer0, 0, dataSize, written);
-	if (filerr.value() != 0)
+	std::error_condition filerr = m_line_tx->write(&m_buffer0, 0, dataSize, written);
+	if (filerr)
 	{
 		osd_printf_verbose("S32COMM: tx connection lost\n");
 		m_line_tx.reset();
@@ -353,6 +335,7 @@ void s32comm_device::send_frame(int dataSize){
 		}
 	}
 }
+
 void s32comm_device::comm_tick_14084()
 {
 	// m_shared[0] = node count

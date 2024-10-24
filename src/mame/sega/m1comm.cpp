@@ -345,7 +345,7 @@ void m1comm_device::comm_tick()
 				osd_printf_verbose("M1COMM: listen on %s\n", m_localhost);
 				uint64_t filesize; // unused
 				filerr = osd_file::open(m_localhost, OPEN_FLAG_CREATE, m_line_rx, filesize);
-				if (filerr.value() != 0)
+				if (filerr)
 				{
 					osd_printf_verbose("M1COMM: rx connection failed\n");
 					m_line_rx.reset();
@@ -358,7 +358,7 @@ void m1comm_device::comm_tick()
 				osd_printf_verbose("M1COMM: connect to %s\n", m_remotehost);
 				uint64_t filesize; // unused
 				filerr = osd_file::open(m_remotehost, 0, m_line_tx, filesize);
-				if (filerr.value() != 0)
+				if (filerr)
 				{
 					osd_printf_verbose("M1COMM: tx connection failed\n");
 					m_line_tx.reset();
@@ -471,6 +471,8 @@ void m1comm_device::comm_tick()
 			// link established
 			do
 			{
+				osd_printf_verbose("M1COMM: rx...\n");
+
 				// try to read a message
 				recv = read_frame(dataSize);
 				while (recv > 0)
@@ -573,6 +575,8 @@ int m1comm_device::read_frame(int dataSize)
 	// try to read a message
 	std::uint32_t recv = 0;
 	std::error_condition filerr = m_line_rx->read(m_buffer0, 0, dataSize, recv);
+	if (filerr)
+		recv = 0;
 	if (recv > 0)
 	{
 		// check if message complete
@@ -593,39 +597,20 @@ int m1comm_device::read_frame(int dataSize)
 					togo -= recv;
 					offset += recv;
 				}
-				switch (filerr.value())
-				{
-					case 0x00:
-					case 0x8c:
-						// 00 - no error
-						// 8c - unknown error (read behind eof?)
-						break;
-
-					default:
-						togo = 0;
-						break;
-				}
+				if (filerr)
+					togo = 0;
 			}
 		}
 	}
-	switch (filerr.value())
+	if (filerr)
 	{
-		case 0x00:
-		case 0x8c:
-			// 00 - no error
-			// 8c - unknown error (read behind eof?)
-			break;
-
-		default:
-			osd_printf_verbose("M1COMM: rx connection lost\n");
-			m_line_rx.reset();
-			if (m_linkalive == 0x01)
-			{
-				m_linkalive = 0x02;
-				m_linktimer = 0x00;
-				m_shared[0] = 0xff;
-			}
-			break;
+		osd_printf_verbose("M1COMM: rx connection lost\n");
+		m_line_rx.reset();
+		if (m_linkalive == 0x01)
+		{
+			m_linkalive = 0x02;
+			m_linktimer = 0x00;
+		}
 	}
 	return recv;
 }
@@ -644,11 +629,9 @@ void m1comm_device::send_frame(int dataSize){
 	if (!m_line_tx)
 		return;
 
-	std::error_condition filerr;
-	std::uint32_t written;
-
-	filerr = m_line_tx->write(&m_buffer0, 0, dataSize, written);
-	if (filerr.value() != 0)
+	std::uint32_t written = 0;
+	std::error_condition filerr = m_line_tx->write(&m_buffer0, 0, dataSize, written);
+	if (filerr)
 	{
 		osd_printf_verbose("M1COMM: tx connection lost\n");
 		m_line_tx.reset();
@@ -656,7 +639,6 @@ void m1comm_device::send_frame(int dataSize){
 		{
 			m_linkalive = 0x02;
 			m_linktimer = 0x00;
-			m_shared[0] = 0xff;
 		}
 	}
 }

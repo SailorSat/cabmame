@@ -471,8 +471,6 @@ void m1comm_device::comm_tick()
 			// link established
 			do
 			{
-				osd_printf_verbose("M1COMM: rx...\n");
-
 				// try to read a message
 				recv = read_frame(dataSize);
 				while (recv > 0)

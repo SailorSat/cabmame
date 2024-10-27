@@ -77,10 +77,6 @@ public:
 				{
 					return std::error_condition(errno, std::generic_category());
 				}
-				else if (result == 0)
-				{
-					return std::errc::connection_reset;
-				}
 				else
 				{
 					actual = std::uint32_t(size_t(result));
@@ -110,7 +106,7 @@ public:
 		{
 			// no data available
 			actual = 0;
-			return std::error_condition();
+			return std::errc::operation_would_block;
 		}
 	}
 

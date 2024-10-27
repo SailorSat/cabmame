@@ -74,10 +74,6 @@ public:
 				{
 					return wsa_error_to_file_error(WSAGetLastError());
 				}
-				else if (result == 0)
-				{
-					return std::errc::connection_reset;
-				}
 				else
 				{
 					actual = result;
@@ -107,7 +103,7 @@ public:
 		{
 			// no data available
 			actual = 0;
-			return std::error_condition();
+			return std::errc::operation_would_block;
 		}
 	}
 

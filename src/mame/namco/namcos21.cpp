@@ -858,7 +858,12 @@ TIMER_DEVICE_CALLBACK_MEMBER(namcos21_state::screen_scanline)
 	int scanline = param;
 	//  int cur_posirq = get_posirq_scanline()*2;
 
-	if (scanline == 240)
+	if (scanline == 60 || scanline == 180 || scanline == 300 || scanline == 420)
+	{
+		m_sci->check_rx();
+	}
+
+	if (scanline == 120 || scanline == 240 || scanline == 360)
 	{
 		m_sci->check_rx();
 	}

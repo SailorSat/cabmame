@@ -304,8 +304,6 @@ int k056230_device::read_frame(int dataSize)
 	// try to read a message
 	std::uint32_t recv = 0;
 	std::error_condition filerr = m_line_rx->read(m_buffer0, 0, dataSize, recv);
-	if (filerr)
-		recv = 0;
 	if (recv > 0)
 	{
 		// check if message complete
@@ -326,14 +324,14 @@ int k056230_device::read_frame(int dataSize)
 					togo -= recv;
 					offset += recv;
 				}
-				if (filerr)
+				if ((!filerr && recv == 0) || (filerr && std::errc::operation_would_block != filerr))
 					togo = 0;
 			}
 		}
 	}
-	if (filerr)
+	if ((!filerr && recv == 0) || (filerr && std::errc::operation_would_block != filerr))
 	{
-		osd_printf_verbose("k056230: rx connection lost %08x %s\n", filerr.value(), filerr.message());
+		osd_printf_verbose("k056230: rx connection error\n");
 		m_line_rx.reset();
 	}
 	return recv;
@@ -348,7 +346,7 @@ void k056230_device::send_frame(int dataSize)
 	std::error_condition filerr = m_line_tx->write(&m_buffer0, 0, dataSize, written);
 	if (filerr)
 	{
-		osd_printf_verbose("k056230: tx connection lost %08x %s\n", filerr.value(), filerr.message());
+		osd_printf_verbose("k056230: tx connection error %08x %s\n");
 		m_line_tx.reset();
 	}
 }

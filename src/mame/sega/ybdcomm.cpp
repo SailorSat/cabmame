@@ -615,8 +615,6 @@ int ybdcomm_device::read_frame(int dataSize)
 	// try to read a message
 	std::uint32_t recv = 0;
 	std::error_condition filerr = m_line_rx->read(m_buffer0, 0, dataSize, recv);
-	if (filerr)
-		recv = 0;
 	if (recv > 0)
 	{
 		// check if message complete
@@ -637,14 +635,14 @@ int ybdcomm_device::read_frame(int dataSize)
 					togo -= recv;
 					offset += recv;
 				}
-				if (filerr)
+				if ((!filerr && recv == 0) || (filerr && std::errc::operation_would_block != filerr))
 					togo = 0;
 			}
 		}
 	}
-	if (filerr)
+	if ((!filerr && recv == 0) || (filerr && std::errc::operation_would_block != filerr))
 	{
-		osd_printf_verbose("YBDCOMM: rx connection lost\n");
+		osd_printf_verbose("YBDCOMM: rx connection error\n");
 		m_line_rx.reset();
 		if (m_linkalive == 0x01)
 		{
@@ -675,7 +673,7 @@ void ybdcomm_device::send_frame(int dataSize)
 	std::error_condition filerr = m_line_tx->write(&m_buffer0, 0, dataSize, written);
 	if (filerr)
 	{
-		osd_printf_verbose("YBDCOMM: tx connection lost\n");
+		osd_printf_verbose("YBDCOMM: tx connection error\n");
 		m_line_tx.reset();
 		if (m_linkalive == 0x01)
 		{

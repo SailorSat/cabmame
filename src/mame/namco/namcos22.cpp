@@ -1178,12 +1178,12 @@ TIMER_DEVICE_CALLBACK_MEMBER(namcos22_state::screen_scanline)
 {
 	int scanline = param;
 
-	/*
-		We have to poll the transmissions, 
-		even if the sci registers haven't been set to send anything,
-		there may still be a need to pass on received data to the next PCB in the 'ring'
-	*/
-	if (scanline == 240)
+	if (scanline == 60 || scanline == 180 || scanline == 300 || scanline == 420)
+	{
+		m_sci->check_rx();
+	}
+
+	if (scanline == 120 || scanline == 240 || scanline == 360)
 	{
 		m_sci->check_rx();
 	}

@@ -68,10 +68,17 @@ namco_c139_device::namco_c139_device(const machine_config &mconfig, const char *
 	strcat(m_remotehost, mconfig.options().comm_remotehost());
 	strcat(m_remotehost, ":");
 	strcat(m_remotehost, mconfig.options().comm_remoteport());
+
+	m_linkid = 0;
+	for (int x = 0; x < sizeof(m_localhost) && m_localhost[x] != 0; x++)
+	{
+
+		m_linkid ^= m_localhost[x];
+	}
+
+	osd_printf_verbose("C139: ID byte = %02d\n", m_linkid);
 #endif
 }
-
-
 
 
 //-------------------------------------------------
@@ -103,7 +110,7 @@ uint16_t namco_c139_device::ram_r(offs_t offset)
 	/*if (!machine().side_effects_disabled())
 		osd_printf_verbose("C139: ram_r %02x = %04x\n", offset, m_ram[offset]);*/
 
-	return m_ram[offset]; // | 0xfe00
+	return m_ram[offset] & 0x1ff;
 }
 
 void namco_c139_device::ram_w(offs_t offset, uint16_t data, uint16_t mem_mask)
@@ -111,7 +118,7 @@ void namco_c139_device::ram_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	/*if (!machine().side_effects_disabled())
 		osd_printf_verbose("C139: ram_w %02x = %04x, %04x\n", offset, data, mem_mask);*/
 
-	m_ram[offset] = data & 0x01ff;
+	COMBINE_DATA(&m_ram[offset]);
 }
 
 uint16_t namco_c139_device::reg_r(offs_t offset)
@@ -162,12 +169,20 @@ void namco_c139_device::comm_tick()
 
 	if (m_linktimer == 0x0000)
 	{
+		std::error_condition filerr;
+
 		// check rx socket
 		if (!m_line_rx)
 		{
 			osd_printf_verbose("C139: listen on %d\n", m_localhost);
 			uint64_t filesize; // unused
-			osd_file::open(m_localhost, OPEN_FLAG_CREATE, m_line_rx, filesize);
+			filerr = osd_file::open(m_localhost, OPEN_FLAG_CREATE, m_line_rx, filesize);
+			if (filerr.value() != 0)
+			{
+				osd_printf_verbose("C139: rx connection failed\n");
+				m_line_tx.reset();
+				m_linktimer = 0x0100;
+			}
 		}
 
 		// check tx socket
@@ -175,7 +190,13 @@ void namco_c139_device::comm_tick()
 		{
 			osd_printf_verbose("C139: connect to %s\n", m_remotehost);
 			uint64_t filesize; // unused
-			osd_file::open(m_remotehost, 0, m_line_tx, filesize);
+			filerr = osd_file::open(m_remotehost, 0, m_line_tx, filesize);
+			if (filerr.value() != 0)
+			{
+				osd_printf_verbose("C139: tx connection failed\n");
+				m_line_tx.reset();
+				m_linktimer = 0x0100;
+			}
 		}
 	}
 }
@@ -230,33 +251,43 @@ void namco_c139_device::comm_rx()
 		int bufOffset = 0;
 		int recv = 0;
 
-		// try to read a message
-		recv = read_frame(dataSize);
-		if (recv > 0)
+		if (m_reg[REG_0_STATUS] != 0x02)
 		{
-			// save message to "rx buffer"
-			rxSize = m_buffer0[1] << 8 | m_buffer0[0];
-			rxOffset = 0; //m_reg[REG_6_RXOFFSET]; // rx offset in words
-			bufOffset = 2;
-			for (int j = 0x00 ; j < rxSize ; j++)
+			// try to read a message
+			recv = read_frame(dataSize);
+			if (recv > 0)
 			{
-				m_ram[0x1000 + (rxOffset & 0x0fff)] = m_buffer0[bufOffset + 1] << 8 | m_buffer0[bufOffset];
-				rxOffset++;
-				bufOffset += 2;
-			}
-			
-			// update regs
-			m_reg[REG_0_STATUS] = 0x02;
-			m_reg[REG_4_RXWORDS] = rxSize;
-			m_reg[REG_6_RXOFFSET] = rxSize; //rxOffset & 0x0fff;
+				// save message to "rx buffer"
+				rxSize = m_buffer0[2] << 8 | m_buffer0[1];
+				rxOffset = 0; //m_reg[REG_6_RXOFFSET]; // rx offset in words
+				osd_printf_verbose("C139: rxOffset = %04x, rxSize == %02x\n", rxOffset, rxSize);
+				bufOffset = 3;
+				for (int j = 0x00 ; j < rxSize ; j++)
+				{
+					m_ram[0x1000 + (rxOffset & 0x0fff)] = m_buffer0[bufOffset + 1] << 8 | m_buffer0[bufOffset];
+					rxOffset++;
+					bufOffset += 2;
+				}
 
-			// fire interrupt
-			m_irq_cb(ASSERT_LINE);
-		}
-		else
-		{
-			// update regs
-			m_reg[REG_0_STATUS] = 0x04;
+				/*
+				// relay messages
+				if (m_buffer0[0] != m_linkid)
+					send_frame(dataSize);
+				*/
+
+				// update regs
+				m_reg[REG_0_STATUS] = 0x02;
+				m_reg[REG_4_RXWORDS] = rxSize;
+				m_reg[REG_6_RXOFFSET] = rxSize; //rxOffset & 0x0fff;
+
+				// fire interrupt
+				m_irq_cb(ASSERT_LINE);
+			}
+			else
+			{
+				// update regs
+				m_reg[REG_0_STATUS] = 0x04;
+			}
 		}
 	}
 }
@@ -303,24 +334,16 @@ int namco_c139_device::read_frame(int dataSize)
 					togo -= recv;
 					offset += recv;
 				}
-				else if (!filerr && recv == 0)
-				{
+				if ((!filerr && recv == 0) || (filerr && std::errc::operation_would_block != filerr))
 					togo = 0;
-				}
 			}
 		}
 	}
-	switch (filerr.value())
+	if ((!filerr && recv == 0) || (filerr && std::errc::operation_would_block != filerr))
 	{
-		case 0x00:
-		case 0x8c:
-			break;
-			
-		default:
-			osd_printf_verbose("C139: rx connection lost %08x %s\n", filerr.value(), filerr.message());
-			m_line_rx.reset();
-			m_linktimer = 0x0100;
-			break;
+		osd_printf_verbose("C139: rx connection error\n");
+		m_line_rx.reset();
+		m_linktimer = 0x0100;
 	}
 	return recv;
 }
@@ -329,7 +352,7 @@ void namco_c139_device::send_data(int dataSize)
 {
 	int txSize = m_reg[REG_5_TXWORDS];
 	int txOffset = m_reg[REG_7_TXOFFSET] >> 1; // tx offset in bytes
-	int bufOffset = 2;
+	int bufOffset = 3;
 
 	if (m_reg[REG_2_START] & 0x02)
 	{
@@ -340,8 +363,9 @@ void namco_c139_device::send_data(int dataSize)
 	if (txSize == 0)
 		return;
 
-	m_buffer0[0] = txSize & 0xff;
-	m_buffer0[1] = (txSize & 0xff00) >> 8;
+	m_buffer0[0] = m_linkid;
+	m_buffer0[1] = txSize & 0xff;
+	m_buffer0[2] = (txSize & 0xff00) >> 8;
 
 	for (int j = 0x00 ; j < txSize ; j++)
 	{
@@ -368,13 +392,11 @@ void namco_c139_device::send_frame(int dataSize)
 	if (!m_line_tx)
 		return;
 
-	std::error_condition filerr;
 	std::uint32_t written;
-
-	filerr = m_line_tx->write(&m_buffer0, 0, dataSize, written);
-	if (filerr && filerr.value() != 0)
+	std::error_condition filerr = m_line_tx->write(&m_buffer0, 0, dataSize, written);
+	if (filerr)
 	{
-		osd_printf_verbose("C139: tx connection lost\n");
+		osd_printf_verbose("C139: tx connection error\n");
 		m_line_tx.reset();
 		m_linktimer = 0x0100;
 	}

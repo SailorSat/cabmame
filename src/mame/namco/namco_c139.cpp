@@ -20,9 +20,9 @@
 //  GLOBAL VARIABLES
 //**************************************************************************
 #define REG_0_STATUS 0
-#define REG_1_CONTROL 1
-#define REG_2_START 2
-#define REG_3_MODE 3
+#define REG_1_MODE 1
+#define REG_2_CONTROL 2
+#define REG_3_START 3
 #define REG_4_RXWORDS 4
 #define REG_5_TXWORDS 5
 #define REG_6_RXOFFSET 6
@@ -198,93 +198,92 @@ void namco_c139_device::comm_tick()
 		{
 			// link established
 			int dataSize = 0x200;
-			int rxSize = 0;
-			int rxOffset = 0;
-			int bufOffset = 0;
-			int recv = 0;
-
-			if (m_reg[REG_0_STATUS] != 0x02)
+			switch (m_reg[REG_1_MODE])
 			{
-				// try to read a message
-				recv = read_frame(dataSize);
-				if (recv > 0)
-				{
-					// save message to "rx buffer"
-					rxSize = m_buffer0[2] << 8 | m_buffer0[1];
-					rxOffset = 0; //m_reg[REG_6_RXOFFSET]; // rx offset in words
-					osd_printf_verbose("C139: rxOffset = %04x, rxSize == %02x\n", rxOffset, rxSize);
-					bufOffset = 3;
-					for (int j = 0x00 ; j < rxSize ; j++)
-					{
-						m_ram[0x1000 + (rxOffset & 0x0fff)] = m_buffer0[bufOffset + 1] << 8 | m_buffer0[bufOffset];
-						rxOffset++;
-						bufOffset += 2;
-					}
+				case 0x08:
+					// ridgera2, raverace
+					// 0b1000
+					// reg2 - 1 > write mem > 3 > 1 > write mem > 3 etc.
+					read_data(dataSize);
+					if (m_reg[REG_2_CONTROL] == 0x03 && m_reg[REG_5_TXWORDS] > 0x00)
+						send_data(dataSize);
+					break;
 
-					/*
-					// relay messages
-					if (m_buffer0[0] != m_linkid)
-						send_frame(dataSize);
-					*/
-
-					// update regs
-					m_reg[REG_0_STATUS] = 0x02;
-					m_reg[REG_4_RXWORDS] = rxSize;
-					m_reg[REG_6_RXOFFSET] = rxSize; //rxOffset & 0x0fff;
-
-					// fire interrupt
-					m_irq_cb(ASSERT_LINE);
-				}
-				else
-				{
-					// update regs
-					m_reg[REG_0_STATUS] = 0x04;
-				}
-			}
-
-			// send data
-			switch (m_reg[REG_1_CONTROL])
-			{
 				case 0x09:
-					// suzuka8h, acedrive, winrungp, cybrcycc
+					// suzuka8h, acedrive, winrungp, cybrcycc, driveyes (center)
 					// 0b1001 - auto-send with sync bit?
-					m_reg[REG_2_START] |= 0x03;
+					// TODO later
+					//m_reg[REG_2_CONTROL] |= 0x03;
+					read_data(dataSize);
 					break;
 
 				case 0x0c:
+					// ridgeracf
+					// 0b1100 - send by register / txwords
+					read_data(dataSize);
+					if (m_reg[REG_2_CONTROL] == 0x03 && m_reg[REG_3_START] == 0x00)
+						send_data(dataSize);
 					break;
 
 				case 0x0d:
-					// final lap
-					// 0b1011 - auto-send with register?
-					if (m_reg[REG_5_TXWORDS] > 0x00)
-						m_reg[REG_2_START] |= 0x01;
+					// final lap, driveyes (left & right)
+					// 0b1101 - auto-send with register?
+					read_data(dataSize);
+					if (m_reg[REG_3_START] == 0x01 && m_reg[REG_5_TXWORDS] > 0x00)
+						send_data(dataSize);
 					break;
 
 				case 0x0f:
-					// init?
+					// init / reset
 					return;
 			}
-
-			if (m_reg[REG_1_CONTROL] & 0x08)
-				if (m_reg[REG_2_START] & 0x01)
-					send_data(dataSize);
 		}
 	}
 }
 
-int namco_c139_device::find_sync_bit()
+void namco_c139_device::read_data(int dataSize)
 {
-	// hack to find sync bit in data area
-	int txOffset = m_reg[REG_7_TXOFFSET] >> 1; // tx offset in bytes
-	for (int j = 0; j < 0x200; j++)
+	int rxSize = 0;
+	int rxOffset = 0;
+	int bufOffset = 0;
+	int recv = 0;
+
+	if (m_reg[REG_0_STATUS] != 0x02)
 	{
-		if (m_ram[txOffset + j] & 0x0100)
+		// try to read a message
+		recv = read_frame(dataSize);
+		if (recv > 0)
 		{
-			return j + 1;
+			// save message to "rx buffer"
+			rxSize = m_buffer0[2] << 8 | m_buffer0[1];
+			rxOffset = 0; //m_reg[REG_6_RXOFFSET]; // rx offset in words
+			osd_printf_verbose("C139: rxOffset = %04x, rxSize == %02x\n", rxOffset, rxSize);
+			bufOffset = 3;
+			for (int j = 0x00 ; j < rxSize ; j++)
+			{
+				m_ram[0x1000 + (rxOffset & 0x0fff)] = m_buffer0[bufOffset + 1] << 8 | m_buffer0[bufOffset];
+				rxOffset++;
+				bufOffset += 2;
+			}
+
+			// relay messages
+			if (m_buffer0[0] != m_linkid)
+				send_frame(dataSize);
+
+			// update regs
+			m_reg[REG_0_STATUS] = 0x02;
+			m_reg[REG_4_RXWORDS] = rxSize;
+			m_reg[REG_6_RXOFFSET] = rxSize; //rxOffset & 0x0fff;
+
+			// fire interrupt
+			m_irq_cb(ASSERT_LINE);
+		}
+		else
+		{
+			// update regs
+			m_reg[REG_0_STATUS] = 0x04;
 		}
 	}
-	return 0;
 }
 
 int namco_c139_device::read_frame(int dataSize)
@@ -335,9 +334,14 @@ void namco_c139_device::send_data(int dataSize)
 	int txOffset = m_reg[REG_7_TXOFFSET] >> 1; // tx offset in bytes
 	int bufOffset = 3;
 
-	if (m_reg[REG_2_START] & 0x02)
+	if (m_reg[REG_1_MODE] == 0x09)
 	{
 		txSize = find_sync_bit();
+	}
+	if (m_reg[REG_1_MODE] == 0x0C)
+	{
+		// ridgeracf sets offset 0x00f2, but writes to 0x01e4; broken?
+		txOffset *= 2;
 	}
 
 	osd_printf_verbose("C139: txOffset = %04x, txSize == %02x\n", txOffset, txSize);
@@ -350,8 +354,8 @@ void namco_c139_device::send_data(int dataSize)
 
 	for (int j = 0x00 ; j < txSize ; j++)
 	{
-		m_buffer0[bufOffset] = m_ram[txOffset] & 0xff;
-		m_buffer0[bufOffset + 1] = (m_ram[txOffset] & 0xff00) >> 8;
+		m_buffer0[bufOffset] = m_ram[txOffset & 0x0fff] & 0xff;
+		m_buffer0[bufOffset + 1] = 0;//(m_ram[txOffset & 0x0fff] & 0xff00) >> 8;
 
 		txOffset++;
 		bufOffset += 2;
@@ -361,8 +365,9 @@ void namco_c139_device::send_data(int dataSize)
 	m_buffer0[bufOffset -1] |= 0x01;
 
 	// reset tx flag, tx words, tx offset
-	m_reg[REG_2_START] ^= 0x01;
-	//m_reg[REG_5_TXWORDS] = 0;
+	//m_reg[REG_2_CONTROL] ^= 0x01;
+	if (m_reg[REG_1_MODE] != 0x09)
+		m_reg[REG_5_TXWORDS] = 0;
 	//m_reg[REG_7_TXOFFSET] = 0;
 
 	send_frame(dataSize);
@@ -381,5 +386,19 @@ void namco_c139_device::send_frame(int dataSize)
 		m_line_tx.reset();
 		m_linktimer = 0x0200;
 	}
+}
+
+int namco_c139_device::find_sync_bit()
+{
+	// hack to find sync bit in data area
+	int txOffset = m_reg[REG_7_TXOFFSET] >> 1; // tx offset in bytes
+	for (int j = 0; j < 0x100; j++)
+	{
+		if (m_ram[txOffset + j] & 0x0100)
+		{
+			return j + 1;
+		}
+	}
+	return 0;
 }
 #endif

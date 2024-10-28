@@ -73,8 +73,9 @@ private:
 	TIMER_CALLBACK_MEMBER(tick_timer_callback);
 
 	void comm_tick();
-	int find_sync_bit();
+	void read_data(int dataSize);
 	int read_frame(int dataSize);
+	int find_sync_bit();
 	void send_data(int dataSize);
 	void send_frame(int dataSize);
 #endif

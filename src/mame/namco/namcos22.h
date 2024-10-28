@@ -512,7 +512,6 @@ protected:
 	void render_frame_active();
 	DECLARE_WRITE_LINE_MEMBER(screen_vblank);
 	DECLARE_WRITE_LINE_MEMBER(sci_int_w);
-	TIMER_DEVICE_CALLBACK_MEMBER(screen_scanline); // SCI trigger
 	bool m_pdp_render_done = false;
 	bool m_render_refresh = false;
 	u64 m_pdp_frame = 0;

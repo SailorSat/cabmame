@@ -88,6 +88,9 @@ namco_c139_device::namco_c139_device(const machine_config &mconfig, const char *
 void namco_c139_device::device_start()
 {
 	m_irq_cb.resolve_safe();
+
+	m_tick_timer = timer_alloc(FUNC(namco_c139_device::tick_timer_callback), this);
+	m_tick_timer->adjust(attotime::never);
 }
 
 
@@ -98,6 +101,8 @@ void namco_c139_device::device_start()
 void namco_c139_device::device_reset()
 {
 	m_linktimer = 0x0000;
+
+	m_tick_timer->adjust(attotime::from_hz(600),0,attotime::from_hz(600));
 }
 
 
@@ -145,23 +150,12 @@ void namco_c139_device::reg_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 		m_linkcount = 0;
 }
 
-void namco_c139_device::vblank_irq_trigger()
-{
 #ifdef C139_SIMULATION
+TIMER_CALLBACK_MEMBER(namco_c139_device::tick_timer_callback)
+{
 	comm_tick();
-	comm_tx();
-#endif
 }
 
-void namco_c139_device::check_rx()
-{
-#ifdef C139_SIMULATION
-	comm_tick();
-	comm_rx();
-#endif
-}
-
-#ifdef C139_SIMULATION
 void namco_c139_device::comm_tick()
 {
 	if (m_linktimer > 0x0000)
@@ -198,96 +192,83 @@ void namco_c139_device::comm_tick()
 				m_linktimer = 0x0100;
 			}
 		}
-	}
-}
 
-void namco_c139_device::comm_tx()
-{
-	// if both sockets are there try to send data
-	if (m_line_rx && m_line_tx)
-	{
-		// link established
-		int dataSize = 0x200;
-
-		// send data
-		switch (m_reg[REG_1_CONTROL])
+		// if both sockets are connected
+		if (m_line_rx && m_line_tx)
 		{
-			case 0x09:
-				// suzuka8h, acedrive, winrungp, cybrcycc
-				// 0b1001 - auto-send with sync bit?
-				m_reg[REG_2_START] |= 0x03;
-				break;
+			// link established
+			int dataSize = 0x200;
+			int rxSize = 0;
+			int rxOffset = 0;
+			int bufOffset = 0;
+			int recv = 0;
 
-			case 0x0c:
-				break;
-
-			case 0x0d:
-				// final lap
-				// 0b1011 - auto-send with register?
-				if (m_reg[REG_5_TXWORDS] > 0x00)
-					m_reg[REG_2_START] |= 0x01;
-				break;
-
-			case 0x0f:
-				// init?
-				return;
-		}
-
-		if (m_reg[REG_1_CONTROL] & 0x08)
-			if (m_reg[REG_2_START] & 0x01)
-				send_data(dataSize);
-	}
-}
-
-void namco_c139_device::comm_rx()
-{
-	// if both sockets are there check for received data
-	if (m_line_rx && m_line_tx)
-	{
-		// link established
-		int dataSize = 0x200;
-		int rxSize = 0;
-		int rxOffset = 0;
-		int bufOffset = 0;
-		int recv = 0;
-
-		if (m_reg[REG_0_STATUS] != 0x02)
-		{
-			// try to read a message
-			recv = read_frame(dataSize);
-			if (recv > 0)
+			if (m_reg[REG_0_STATUS] != 0x02)
 			{
-				// save message to "rx buffer"
-				rxSize = m_buffer0[2] << 8 | m_buffer0[1];
-				rxOffset = 0; //m_reg[REG_6_RXOFFSET]; // rx offset in words
-				osd_printf_verbose("C139: rxOffset = %04x, rxSize == %02x\n", rxOffset, rxSize);
-				bufOffset = 3;
-				for (int j = 0x00 ; j < rxSize ; j++)
+				// try to read a message
+				recv = read_frame(dataSize);
+				if (recv > 0)
 				{
-					m_ram[0x1000 + (rxOffset & 0x0fff)] = m_buffer0[bufOffset + 1] << 8 | m_buffer0[bufOffset];
-					rxOffset++;
-					bufOffset += 2;
+					// save message to "rx buffer"
+					rxSize = m_buffer0[2] << 8 | m_buffer0[1];
+					rxOffset = 0; //m_reg[REG_6_RXOFFSET]; // rx offset in words
+					osd_printf_verbose("C139: rxOffset = %04x, rxSize == %02x\n", rxOffset, rxSize);
+					bufOffset = 3;
+					for (int j = 0x00 ; j < rxSize ; j++)
+					{
+						m_ram[0x1000 + (rxOffset & 0x0fff)] = m_buffer0[bufOffset + 1] << 8 | m_buffer0[bufOffset];
+						rxOffset++;
+						bufOffset += 2;
+					}
+
+					/*
+					// relay messages
+					if (m_buffer0[0] != m_linkid)
+						send_frame(dataSize);
+					*/
+
+					// update regs
+					m_reg[REG_0_STATUS] = 0x02;
+					m_reg[REG_4_RXWORDS] = rxSize;
+					m_reg[REG_6_RXOFFSET] = rxSize; //rxOffset & 0x0fff;
+
+					// fire interrupt
+					m_irq_cb(ASSERT_LINE);
 				}
-
-				/*
-				// relay messages
-				if (m_buffer0[0] != m_linkid)
-					send_frame(dataSize);
-				*/
-
-				// update regs
-				m_reg[REG_0_STATUS] = 0x02;
-				m_reg[REG_4_RXWORDS] = rxSize;
-				m_reg[REG_6_RXOFFSET] = rxSize; //rxOffset & 0x0fff;
-
-				// fire interrupt
-				m_irq_cb(ASSERT_LINE);
+				else
+				{
+					// update regs
+					m_reg[REG_0_STATUS] = 0x04;
+				}
 			}
-			else
+
+			// send data
+			switch (m_reg[REG_1_CONTROL])
 			{
-				// update regs
-				m_reg[REG_0_STATUS] = 0x04;
+				case 0x09:
+					// suzuka8h, acedrive, winrungp, cybrcycc
+					// 0b1001 - auto-send with sync bit?
+					m_reg[REG_2_START] |= 0x03;
+					break;
+
+				case 0x0c:
+					break;
+
+				case 0x0d:
+					// final lap
+					// 0b1011 - auto-send with register?
+					if (m_reg[REG_5_TXWORDS] > 0x00)
+						m_reg[REG_2_START] |= 0x01;
+					break;
+
+				case 0x0f:
+					// init?
+					return;
 			}
+
+			if (m_reg[REG_1_CONTROL] & 0x08)
+				if (m_reg[REG_2_START] & 0x01)
+					send_data(dataSize);
 		}
 	}
 }
@@ -343,7 +324,7 @@ int namco_c139_device::read_frame(int dataSize)
 	{
 		osd_printf_verbose("C139: rx connection error\n");
 		m_line_rx.reset();
-		m_linktimer = 0x0100;
+		m_linktimer = 0x0200;
 	}
 	return recv;
 }
@@ -398,7 +379,7 @@ void namco_c139_device::send_frame(int dataSize)
 	{
 		osd_printf_verbose("C139: tx connection error\n");
 		m_line_tx.reset();
-		m_linktimer = 0x0100;
+		m_linktimer = 0x0200;
 	}
 }
 #endif

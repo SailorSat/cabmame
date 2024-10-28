@@ -685,7 +685,7 @@ void namcos2_state::namcos2_68k_default_cpu_board_am(address_map &map)
 	map(0x420000, 0x42003f).rw(m_c123tmap, FUNC(namco_c123tmap_device::control16_r), FUNC(namco_c123tmap_device::control16_w));
 	map(0x440000, 0x44ffff).r(FUNC(namcos2_state::c116_r)).w(m_c116, FUNC(namco_c116_device::write)).umask16(0x00ff).cswidth(16);
 	map(0x460000, 0x460fff).mirror(0x00f000).rw(FUNC(namcos2_state::dpram_word_r), FUNC(namcos2_state::dpram_word_w));
-	map(0x480000, 0x483fff).rw(m_sci, FUNC(namco_c139_device::ram_r), FUNC(namco_c139_device::ram_w));
+	map(0x480000, 0x483fff).m(m_sci, FUNC(namco_c139_device::data_map));
 	map(0x4a0000, 0x4a000f).m(m_sci, FUNC(namco_c139_device::regs_map));
 }
 
@@ -1731,16 +1731,6 @@ TIMER_DEVICE_CALLBACK_MEMBER(namcos2_state::screen_scanline)
 	int scanline = param;
 	int cur_posirq = get_pos_irq_scanline();
 
-	if (scanline == 30 || scanline == 90 || scanline == 150 || scanline == 210 )
-	{
-		m_sci->check_rx();
-	}
-
-	if (scanline == 60 || scanline == 120 || scanline == 180 )
-	{
-		m_sci->check_rx();
-	}
-
 	if (scanline == 200) // triggering this a bit before Vblank allows the Assault Plus mode select screen to work without overclocking the IO MCU, exact timings unknown.
 	{
 		if (m_c65)
@@ -1754,7 +1744,6 @@ TIMER_DEVICE_CALLBACK_MEMBER(namcos2_state::screen_scanline)
 	{
 		m_master_intc->vblank_irq_trigger();
 		m_slave_intc->vblank_irq_trigger();
-		m_sci->vblank_irq_trigger();
 	}
 
 	if(scanline == cur_posirq)

@@ -43,9 +43,6 @@ public:
 	uint16_t reg_r(offs_t offset);
 	void reg_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
 
-	void vblank_irq_trigger();
-	void check_rx();
-
 protected:
 	// device-level overrides
 	virtual void device_start() override;
@@ -72,9 +69,10 @@ private:
 	uint8_t m_linkid = 0;
 	uint8_t m_linkcount = 0;
 
+	emu_timer *m_tick_timer = nullptr;
+	TIMER_CALLBACK_MEMBER(tick_timer_callback);
+
 	void comm_tick();
-	void comm_tx();
-	void comm_rx();
 	int find_sync_bit();
 	int read_frame(int dataSize);
 	void send_data(int dataSize);

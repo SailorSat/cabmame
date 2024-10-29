@@ -67,7 +67,7 @@ private:
 	uint16_t m_linktimer = 0;
 	uint8_t m_linkalive = 0;
 	uint8_t m_linkid = 0;
-	uint8_t m_linkcount = 0;
+	uint8_t m_txcount = 0;
 
 	emu_timer *m_tick_timer = nullptr;
 	TIMER_CALLBACK_MEMBER(tick_timer_callback);

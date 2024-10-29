@@ -65,7 +65,7 @@ private:
 
 	uint8_t m_linkenable = 0;
 	uint16_t m_linktimer = 0;
-	uint8_t m_linkalive = 0;
+	uint8_t m_txsize = 0;
 	uint8_t m_linkid = 0;
 	uint8_t m_txcount = 0;
 

@@ -124,6 +124,8 @@ void namco_c139_device::ram_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 		osd_printf_verbose("C139: ram_w %02x = %04x, %04x\n", offset, data, mem_mask);*/
 
 	COMBINE_DATA(&m_ram[offset]);
+
+	m_txsize = offset;
 }
 
 uint16_t namco_c139_device::reg_r(offs_t offset)
@@ -143,8 +145,18 @@ void namco_c139_device::reg_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 
 	m_reg[offset] = data;
 
-	if (offset == 0 && data == 0)
+	// status reset?
+	if (offset == REG_0_STATUS && data == 0)
 		m_reg[offset] = 4;
+
+	// hack to get raverace working
+	if (m_reg[REG_1_MODE] == 0x08 && offset == REG_2_CONTROL)
+	{
+		if (data == 1)
+			m_txsize = 0;
+		if (data == 3)
+			m_reg[REG_5_TXWORDS] = m_txsize + 2;
+	}
 }
 
 #ifdef C139_SIMULATION
@@ -209,9 +221,8 @@ void namco_c139_device::comm_tick()
 
 				case 0x09:
 					// suzuka8h, acedrive, winrungp, cybrcycc, driveyes (center)
-					// 0b1001 - auto-send with sync bit?
-					// TODO later
-					//m_reg[REG_2_CONTROL] |= 0x03;
+					// 0b1001 - auto-send via sync bit (and auto offset)
+					send_data(dataSize);
 					read_data(dataSize);
 					break;
 
@@ -226,9 +237,9 @@ void namco_c139_device::comm_tick()
 
 				case 0x0d:
 					// final lap, driveyes (left & right)
-					// 0b1101 - auto-send with register?
+					// 0b1101 - auto-send via register?
 					read_data(dataSize);
-					if (m_reg[REG_3_START] == 0x01 && m_reg[REG_5_TXWORDS] > 0x00)
+					if (m_reg[REG_3_START] == 0x00 && m_reg[REG_5_TXWORDS] > 0x00)
 						send_data(dataSize);
 					break;
 
@@ -333,9 +344,14 @@ void namco_c139_device::send_data(int dataSize)
 	if (m_reg[REG_1_MODE] == 0x09)
 	{
 		txSize = find_sync_bit();
+		if (txSize == 0x01) {
+			m_reg[REG_7_TXOFFSET] += 0x100;
+			txSize = 0;
+		}
 	}
-	if (m_reg[REG_1_MODE] == 0x0C)
+	if (m_reg[REG_1_MODE] == 0x08 || m_reg[REG_1_MODE] == 0x0C)
 	{
+		// raverace sets offset 0x1000, but writes to 0x0000
 		// ridgeracf sets offset 0x00f2, but writes to 0x01e4
 		txOffset *= 2;
 	}
@@ -365,8 +381,8 @@ void namco_c139_device::send_data(int dataSize)
 	{
 		case 0x08:
 		case 0x09:
-			m_txcount = 0x01;
 			// do nothing
+			m_txcount = 0x01;
 			break;
 		case 0x0c:
 			m_reg[REG_5_TXWORDS] = 0;
@@ -403,6 +419,6 @@ int namco_c139_device::find_sync_bit()
 			return j + 1;
 		}
 	}
-	return 0;
+	return m_txsize;
 }
 #endif

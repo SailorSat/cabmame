@@ -23,7 +23,7 @@
     - winrun91
     - driveyes (center)
     - cybsled
-    - cybrcomm -- does this actually have multiplayer? wiki states it does not, but link options in service menu
+    - cybrcomm
     - acedrive
     - victlap
     - cybrcycc
@@ -52,7 +52,7 @@
 
     TODO:
     - hook a real chip and test in detail
-    - mode 09 & 0d only show 1 machine in service mode and attract mode, however most games seem to work "okay" in multiplayer.
+    - mode 0d only show 1 machine in service mode and attract mode, however most games seem to work "okay" in multiplayer.
     - maybe split up drivers eyes?
 
 ***************************************************************************/
@@ -330,6 +330,10 @@ void namco_c139_device::read_data(int dataSize)
 		recv = read_frame(dataSize);
 		if (recv > 0)
 		{
+			// (hack) update linkcount for mode 09
+			if (m_buffer0[0] == m_linkid && m_reg[REG_1_MODE] == 0x09 && (m_reg_f3 & 0x2) == 2)
+				m_buffer0[0x07] = m_buffer0[0x1ff];
+
 			// save message to "rx buffer"
 			rxSize = m_buffer0[2] << 8 | m_buffer0[1];
 			rxOffset = m_reg[REG_6_RXOFFSET]; // rx offset in words
@@ -344,7 +348,12 @@ void namco_c139_device::read_data(int dataSize)
 
 			// relay messages
 			if (m_buffer0[0] != m_linkid)
+			{
+				if (m_reg[REG_1_MODE] == 0x09 && (m_reg_f3 & 0x2) == 2)
+					m_buffer0[0x1ff]++;
+
 				send_frame(dataSize);
+			}
 
 			// update regs
 			m_reg[REG_0_STATUS] = 0x06;
@@ -445,6 +454,7 @@ void namco_c139_device::send_data(int dataSize)
 	m_buffer0[0] = m_linkid;
 	m_buffer0[1] = txSize & 0xff;
 	m_buffer0[2] = (txSize & 0xff00) >> 8;
+	m_buffer0[0x1ff] = 1;
 
 	for (int j = 0x00 ; j < txSize ; j++)
 	{
@@ -495,21 +505,27 @@ void namco_c139_device::send_frame(int dataSize)
 
 int namco_c139_device::find_sync_bit(int txOffset)
 {
-	// hack to find sync bit in data area
-	for (int j = 0; j < 0x100; j++)
-	{
-		// cybrcycc
-		if ((m_ram[(txOffset + j) & 0x0fff] & 0x01ff) == 0x1ff)
-			return 0;
-
-		if (m_ram[(txOffset + j) & 0x0fff] & 0x0100)
-		{
-			return j + 1;
-		}
-	}
 	if (m_reg[REG_1_MODE] == 0x08)
 		return m_txsize;
-	else
+
+	// cybrcycc
+	if ((m_ram[(txOffset) & 0x0fff] & 0x01ff) == 0x1ff)
 		return 0;
+
+	// hack to find sync bit in data area
+	for (int i = 0; i < 0x08; i++)
+	{
+		int subOffset = i * 0x80;
+		for (int j = 0; j < 0x100; j++)
+		{
+			if (m_ram[(txOffset + subOffset + j) & 0x0fff] & 0x0100)
+			{
+				if (i > 0)
+					m_reg[REG_7_TXOFFSET] += subOffset * 2;
+				return j + 1;
+			}
+		}
+	}
+	return 0;
 }
 #endif

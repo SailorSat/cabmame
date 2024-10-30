@@ -1,14 +1,54 @@
 // license:BSD-3-Clause
-// copyright-holders:Angelo Salese
+// copyright-holders:Angelo Salese, John Bennett, Ariane Fugmann
 /***************************************************************************
 
     Namco C139 - Serial I/F Controller
 
+    (from assault schematics)
+    connected to M5M5179P RAM with a 13-bit address bus, and 9 bit data bus
+    connected to host cpu with a 14*-bit address bus, and 13 bit data bus
+    2 clock inputs - 16M and 12M
+
+    currently there are 4 known modes of operation:
+
+    mode 08:
+    - ridgera2
+    - raverace
+
+    mode 09:
+    - fourtrax
+    - suzuka8h
+    - suzuk8h2
+    - winrungp
+    - winrun91
+    - driveyes (center)
+    - cybsled -- not working right now
+    - cybrcomm -- does this actually have multiplayer? wiki states it does not, but link options in service menu
+    - acedrive
+    - victlap
+    - cybrcycc
+    - adillor
+
+    mode 0c:
+    - ridgeracf    0c
+
+    mode 0d:
+    - finallap
+    - finallap2
+    - finallap3
+    - driveyes (sides)
+    - tokyowar
+    - aircomb
+    - dirtdash
+
+    alpiner2b uses fd -- not working right now
+
+    there also appears to be a configuration mode 0f - used to setup byte/word adressing
 
     TODO:
-    - Make this to actually work!
-    - Is RAM shared with a specific CPU other than master/slave?
-    - is this another MCU with internal ROM?
+    - hook a real chip and test in detail
+    - mode 09 & 0d only show 1 machine in service mode and attract mode, however most games seem to work "okay" in multiplayer.
+	- maybe split up drivers eyes?
 
 ***************************************************************************/
 
@@ -23,8 +63,8 @@
 #define REG_1_MODE 1
 #define REG_2_CONTROL 2
 #define REG_3_START 3
-#define REG_4_RXWORDS 4
-#define REG_5_TXWORDS 5
+#define REG_4_RXSIZE 4
+#define REG_5_TXSIZE 5
 #define REG_6_RXOFFSET 6
 #define REG_7_TXOFFSET 7
 
@@ -164,6 +204,10 @@ void namco_c139_device::reg_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 	if (offset == REG_2_CONTROL && data == 0x03) 
 		m_txblock = 0x00;
 
+	// mode 0d tx trigger
+	if (offset == REG_5_TXSIZE && data > 0) 
+		m_txblock = 0x00;
+
 	// hack to get raverace working
 	if (m_reg[REG_1_MODE] == 0x08 && offset == REG_2_CONTROL)
 	{
@@ -171,7 +215,7 @@ void namco_c139_device::reg_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 			m_txsize = 0;
 		if (data == 3)
 		{
-			m_reg[REG_5_TXWORDS] = m_txsize + 2;
+			m_reg[REG_5_TXSIZE] = m_txsize + 2;
 		}
 	}
 }
@@ -232,7 +276,7 @@ void namco_c139_device::comm_tick()
 					// reg2 - 1 > write mem > 3 > 1 > write mem > 3 etc.
 					// txcount NOT cleared on send
 					read_data(dataSize);
-					if (m_reg[REG_2_CONTROL] == 0x03 && m_reg[REG_5_TXWORDS] > 0x00)
+					if (m_reg[REG_2_CONTROL] == 0x03 && m_reg[REG_5_TXSIZE] > 0x00)
 						send_data(dataSize);
 					break;
 
@@ -256,7 +300,7 @@ void namco_c139_device::comm_tick()
 					// final lap, driveyes (left & right)
 					// 0b1101 - auto-send via register?
 					read_data(dataSize);
-					if (m_reg[REG_3_START] == 0x00 && m_reg[REG_5_TXWORDS] > 0x00)
+					if (m_reg[REG_3_START] == 0x00 && m_reg[REG_5_TXSIZE] > 0x00)
 						send_data(dataSize);
 					break;
 
@@ -275,7 +319,7 @@ void namco_c139_device::read_data(int dataSize)
 	int bufOffset = 0;
 	int recv = 0;
 
-	if (m_reg[REG_0_STATUS] != 0x02)
+	if (m_reg[REG_0_STATUS] != 0x06)
 	{
 		// try to read a message
 		recv = read_frame(dataSize);
@@ -298,8 +342,11 @@ void namco_c139_device::read_data(int dataSize)
 				send_frame(dataSize);
 
 			// update regs
-			m_reg[REG_0_STATUS] = 0x02;
-			m_reg[REG_4_RXWORDS] += rxSize;
+			m_reg[REG_0_STATUS] = 0x06;
+			if (m_reg[REG_1_MODE] != 0x0d)
+				m_reg[REG_4_RXSIZE] += rxSize;
+			else
+				m_reg[REG_4_RXSIZE] -= rxSize;
 			m_reg[REG_6_RXOFFSET] += rxSize;
 
 			// fire interrupt
@@ -318,7 +365,7 @@ int namco_c139_device::read_frame(int dataSize)
 	if (!m_line_rx)
 		return 0;
 
-	if (m_reg[REG_0_STATUS] == 0x02)
+	if (m_reg[REG_0_STATUS] == 0x06)
 		return 0;
 
 	// try to read a message
@@ -361,14 +408,17 @@ int namco_c139_device::read_frame(int dataSize)
 
 void namco_c139_device::send_data(int dataSize)
 {
-	int txSize = m_reg[REG_5_TXWORDS];
+	int txSize = m_reg[REG_5_TXSIZE];
 	int txOffset = m_reg[REG_7_TXOFFSET] >> 1; // tx offset in bytes
 	int bufOffset = 3;
 
 	if (m_txblock == 0x01)
 		return;
 
-	if (m_reg[REG_0_STATUS] == 0x02)
+	if (m_reg[REG_0_STATUS] == 0x06)
+		return;
+
+	if (m_reg[REG_1_MODE] == 0x0d && txOffset > 0)
 		return;
 
 	if ((m_reg_f3 & 0x2) == 0)
@@ -382,12 +432,6 @@ void namco_c139_device::send_data(int dataSize)
 			txSize = 0;
 		}
 	}
-	/*if (m_reg[REG_1_MODE] == 0x08 || m_reg[REG_1_MODE] == 0x0C)
-	{
-		// raverace sets offset 0x1000, but writes to 0x0000
-		// ridgeracf sets offset 0x00f2, but writes to 0x01e4
-		txOffset *= 2;
-	}*/
 
 	osd_printf_verbose("C139: txOffset = %04x, txSize == %02x\n", txOffset, txSize);
 	if (txSize == 0)
@@ -418,7 +462,8 @@ void namco_c139_device::send_data(int dataSize)
 			m_txblock = 0x01;
 			break;
 		case 0x0c:
-			m_reg[REG_5_TXWORDS] = 0;
+		case 0x0d:
+			m_reg[REG_5_TXSIZE] = 0;
 			m_txblock = 0x01;
 			break;
 	}

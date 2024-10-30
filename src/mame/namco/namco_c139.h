@@ -63,11 +63,11 @@ private:
 	uint8_t m_buffer1[0x200]{};
 	uint8_t m_framesync;
 
-	uint8_t m_linkenable = 0;
 	uint16_t m_linktimer = 0;
-	uint8_t m_txsize = 0;
 	uint8_t m_linkid = 0;
-	uint8_t m_txcount = 0;
+	uint8_t m_txsize = 0;
+	uint8_t m_txblock = 0;
+	uint8_t m_reg_f3 = 0;
 
 	emu_timer *m_tick_timer = nullptr;
 	TIMER_CALLBACK_MEMBER(tick_timer_callback);
@@ -75,7 +75,7 @@ private:
 	void comm_tick();
 	void read_data(int dataSize);
 	int read_frame(int dataSize);
-	int find_sync_bit();
+	int find_sync_bit(int txOffset);
 	void send_data(int dataSize);
 	void send_frame(int dataSize);
 #endif

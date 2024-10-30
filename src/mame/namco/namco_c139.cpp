@@ -102,7 +102,7 @@ void namco_c139_device::device_reset()
 {
 	m_linktimer = 0x0000;
 
-	m_tick_timer->adjust(attotime::from_hz(1000),0,attotime::from_hz(1000));
+	m_tick_timer->adjust(attotime::from_hz(600),0,attotime::from_hz(600));
 }
 
 
@@ -145,9 +145,24 @@ void namco_c139_device::reg_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 
 	m_reg[offset] = data;
 
-	// status reset?
+	// status reset / irq ack?
 	if (offset == REG_0_STATUS && data == 0)
 		m_reg[offset] = 4;
+
+	// possibly setup/config mode?
+	if (m_reg[REG_1_MODE] == 0x0f && offset == REG_3_START)
+	{
+		m_reg_f3 = data;
+		osd_printf_warning("C139: m_reg_f3 = %02x\n", m_reg_f3);
+	}
+
+	// mode 09 tx trigger
+	if (offset == REG_1_MODE && data == 0x09 && m_txsize > 0) 
+		m_txblock = 0x00;
+
+	// mode 08 & 0c tx trigger
+	if (offset == REG_2_CONTROL && data == 0x03) 
+		m_txblock = 0x00;
 
 	// hack to get raverace working
 	if (m_reg[REG_1_MODE] == 0x08 && offset == REG_2_CONTROL)
@@ -155,7 +170,9 @@ void namco_c139_device::reg_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 		if (data == 1)
 			m_txsize = 0;
 		if (data == 3)
+		{
 			m_reg[REG_5_TXWORDS] = m_txsize + 2;
+		}
 	}
 }
 
@@ -214,16 +231,16 @@ void namco_c139_device::comm_tick()
 					// 0b1000
 					// reg2 - 1 > write mem > 3 > 1 > write mem > 3 etc.
 					// txcount NOT cleared on send
+					read_data(dataSize);
 					if (m_reg[REG_2_CONTROL] == 0x03 && m_reg[REG_5_TXWORDS] > 0x00)
 						send_data(dataSize);
-					read_data(dataSize);
 					break;
 
 				case 0x09:
 					// suzuka8h, acedrive, winrungp, cybrcycc, driveyes (center)
 					// 0b1001 - auto-send via sync bit (and auto offset)
-					send_data(dataSize);
 					read_data(dataSize);
+					send_data(dataSize);
 					break;
 
 				case 0x0c:
@@ -258,34 +275,40 @@ void namco_c139_device::read_data(int dataSize)
 	int bufOffset = 0;
 	int recv = 0;
 
-	// try to read a message
-	recv = read_frame(dataSize);
-	if (recv > 0)
+	if (m_reg[REG_0_STATUS] != 0x02)
 	{
-		// save message to "rx buffer"
-		rxSize = m_buffer0[2] << 8 | m_buffer0[1];
-		rxOffset = m_reg[REG_6_RXOFFSET]; // rx offset in words
-		osd_printf_verbose("C139: rxOffset = %04x, rxSize == %02x\n", rxOffset, rxSize);
-		bufOffset = 3;
-		for (int j = 0x00 ; j < rxSize ; j++)
+		// try to read a message
+		recv = read_frame(dataSize);
+		if (recv > 0)
 		{
-			m_ram[0x1000 + (rxOffset & 0x0fff)] = m_buffer0[bufOffset + 1] << 8 | m_buffer0[bufOffset];
-			rxOffset++;
-			bufOffset += 2;
+			// save message to "rx buffer"
+			rxSize = m_buffer0[2] << 8 | m_buffer0[1];
+			rxOffset = m_reg[REG_6_RXOFFSET]; // rx offset in words
+			osd_printf_verbose("C139: rxOffset = %04x, rxSize == %02x\n", rxOffset, rxSize);
+			bufOffset = 3;
+			for (int j = 0x00 ; j < rxSize ; j++)
+			{
+				m_ram[0x1000 + (rxOffset & 0x0fff)] = m_buffer0[bufOffset + 1] << 8 | m_buffer0[bufOffset];
+				rxOffset++;
+				bufOffset += 2;
+			}
+
+			// relay messages
+			if (m_buffer0[0] != m_linkid)
+				send_frame(dataSize);
+
+			// update regs
+			m_reg[REG_0_STATUS] = 0x02;
+			m_reg[REG_4_RXWORDS] += rxSize;
+			m_reg[REG_6_RXOFFSET] += rxSize;
+
+			// fire interrupt
+			m_irq_cb(ASSERT_LINE);
 		}
-
-		// relay messages
-		if (m_buffer0[0] != m_linkid)
-			send_frame(dataSize);
-		else
-			m_txcount = 0x00;
-
-		// update regs
-		m_reg[REG_0_STATUS] = 0x02;
-		m_reg[REG_4_RXWORDS] += rxSize;
-		m_reg[REG_6_RXOFFSET] += rxSize;
-
-		// fire interrupt
+	}
+	else
+	{
+		// fire interrupt (again)
 		m_irq_cb(ASSERT_LINE);
 	}
 }
@@ -293,6 +316,9 @@ void namco_c139_device::read_data(int dataSize)
 int namco_c139_device::read_frame(int dataSize)
 {
 	if (!m_line_rx)
+		return 0;
+
+	if (m_reg[REG_0_STATUS] == 0x02)
 		return 0;
 
 	// try to read a message
@@ -328,6 +354,7 @@ int namco_c139_device::read_frame(int dataSize)
 		osd_printf_verbose("C139: rx connection error\n");
 		m_line_rx.reset();
 		m_linktimer = 0x0200;
+		m_txblock = 0x00;
 	}
 	return recv;
 }
@@ -338,23 +365,29 @@ void namco_c139_device::send_data(int dataSize)
 	int txOffset = m_reg[REG_7_TXOFFSET] >> 1; // tx offset in bytes
 	int bufOffset = 3;
 
-	if (m_txcount == 0x01)
+	if (m_txblock == 0x01)
 		return;
+
+	if (m_reg[REG_0_STATUS] == 0x02)
+		return;
+
+	if ((m_reg_f3 & 0x2) == 0)
+		txOffset *= 2;
 
 	if (m_reg[REG_1_MODE] == 0x09)
 	{
-		txSize = find_sync_bit();
+		txSize = find_sync_bit(txOffset);
 		if (txSize == 0x01) {
 			m_reg[REG_7_TXOFFSET] += 0x100;
 			txSize = 0;
 		}
 	}
-	if (m_reg[REG_1_MODE] == 0x08 || m_reg[REG_1_MODE] == 0x0C)
+	/*if (m_reg[REG_1_MODE] == 0x08 || m_reg[REG_1_MODE] == 0x0C)
 	{
 		// raverace sets offset 0x1000, but writes to 0x0000
 		// ridgeracf sets offset 0x00f2, but writes to 0x01e4
 		txOffset *= 2;
-	}
+	}*/
 
 	osd_printf_verbose("C139: txOffset = %04x, txSize == %02x\n", txOffset, txSize);
 	if (txSize == 0)
@@ -382,14 +415,15 @@ void namco_c139_device::send_data(int dataSize)
 		case 0x08:
 		case 0x09:
 			// do nothing
-			m_txcount = 0x01;
+			m_txblock = 0x01;
 			break;
 		case 0x0c:
 			m_reg[REG_5_TXWORDS] = 0;
-			m_txcount = 0x01;
+			m_txblock = 0x01;
 			break;
 	}
 
+	m_txsize = 0;
 	send_frame(dataSize);
 }
 
@@ -405,20 +439,27 @@ void namco_c139_device::send_frame(int dataSize)
 		osd_printf_verbose("C139: tx connection error\n");
 		m_line_tx.reset();
 		m_linktimer = 0x0200;
+		m_txblock = 0x00;
 	}
 }
 
-int namco_c139_device::find_sync_bit()
+int namco_c139_device::find_sync_bit(int txOffset)
 {
 	// hack to find sync bit in data area
-	int txOffset = m_reg[REG_7_TXOFFSET] >> 1; // tx offset in bytes
 	for (int j = 0; j < 0x100; j++)
 	{
-		if (m_ram[txOffset + j] & 0x0100)
+		// cybrcycc
+		if ((m_ram[(txOffset + j) & 0x0fff] & 0x01ff) == 0x1ff)
+			return 0;
+
+		if (m_ram[(txOffset + j) & 0x0fff] & 0x0100)
 		{
 			return j + 1;
 		}
 	}
-	return m_txsize;
+	if (m_reg[REG_1_MODE] == 0x08)
+		return m_txsize;
+	else
+		return 0;
 }
 #endif

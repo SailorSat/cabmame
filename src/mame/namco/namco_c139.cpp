@@ -22,7 +22,7 @@
     - winrungp
     - winrun91
     - driveyes (center)
-    - cybsled -- not working right now
+    - cybsled
     - cybrcomm -- does this actually have multiplayer? wiki states it does not, but link options in service menu
     - acedrive
     - victlap
@@ -45,10 +45,15 @@
 
     there also appears to be a configuration mode 0f - used to setup byte/word adressing
 
+    NOTES:
+      apparently mode 09 and 0d modify the received data.
+      mode 09 does not update *anything* after data got changed. might be automatic.
+      mode 0d updates the tx offset pointing to the rx buffer (which is not supported right now)
+
     TODO:
     - hook a real chip and test in detail
     - mode 09 & 0d only show 1 machine in service mode and attract mode, however most games seem to work "okay" in multiplayer.
-	- maybe split up drivers eyes?
+    - maybe split up drivers eyes?
 
 ***************************************************************************/
 

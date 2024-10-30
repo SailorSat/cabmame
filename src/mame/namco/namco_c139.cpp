@@ -4,7 +4,7 @@
 
     Namco C139 - Serial I/F Controller
 
-    (from assault schematics)
+    (from assault schematics, page 5-18 and 5-19)
     connected to M5M5179P RAM with a 13-bit address bus, and 9 bit data bus
     connected to host cpu with a 14*-bit address bus, and 13 bit data bus
     2 clock inputs - 16M and 12M

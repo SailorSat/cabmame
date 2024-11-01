@@ -115,10 +115,10 @@ namco_c139_device::namco_c139_device(const machine_config &mconfig, const char *
 	strcat(m_remotehost, mconfig.options().comm_remoteport());
 
 	m_linkid = 0;
-	for (int x = 0; x < sizeof(m_localhost) && m_localhost[x] != 0; x++)
+	for (int x = 0; x < sizeof(m_remotehost) && m_remotehost[x] != 0; x++)
 	{
 
-		m_linkid ^= m_localhost[x];
+		m_linkid ^= m_remotehost[x];
 	}
 
 	osd_printf_verbose("C139: ID byte = %02d\n", m_linkid);
@@ -505,9 +505,6 @@ void namco_c139_device::send_frame(int dataSize)
 
 int namco_c139_device::find_sync_bit(int txOffset)
 {
-	if (m_reg[REG_1_MODE] == 0x08)
-		return m_txsize;
-
 	// cybrcycc
 	if ((m_ram[(txOffset) & 0x0fff] & 0x01ff) == 0x1ff)
 		return 0;

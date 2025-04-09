@@ -2375,6 +2375,30 @@ end
 
 ---------------------------------------------------
 --
+--@src/devices/machine/mcd.h,MACHINES["MCD"] = true
+---------------------------------------------------
+
+if (MACHINES["MCD"]~=null) then
+	files {
+		MAME_DIR .. "src/devices/machine/mcd.cpp",
+		MAME_DIR .. "src/devices/machine/mcd.h",
+	}
+end
+
+---------------------------------------------------
+--
+--@src/devices/machine/mcd2.h,MACHINES["MCD2"] = true
+---------------------------------------------------
+
+if (MACHINES["MCD2"]~=null) then
+	files {
+		MAME_DIR .. "src/devices/machine/mcd2.cpp",
+		MAME_DIR .. "src/devices/machine/mcd2.h",
+	}
+end
+
+---------------------------------------------------
+--
 --@src/devices/machine/mcf5206e.h,MACHINES["MCF5206E"] = true
 ---------------------------------------------------
 

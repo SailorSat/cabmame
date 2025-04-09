@@ -82,6 +82,7 @@
 #include "3xtwin.h"
 #include "eis_sad8852.h"
 #include "eis_twib.h"
+#include "enet16.h"
 #include "ne1000.h"
 #include "ne2000.h"
 #include "np600.h"
@@ -98,6 +99,10 @@
 #include "finalchs.h"
 #include "hpblp.h"
 #include "opus100pm.h"
+#include "insidetrak.h"
+#include "formatc.h"
+#include "vid1000.h"
+#include "pix1000.h"
 
 
 void pc_isa8_cards(device_slot_interface &device)
@@ -261,4 +266,9 @@ void pc_isa16_cards(device_slot_interface &device)
 	device.option_add("omti8621", ISA16_OMTI8621);
 	device.option_add("lrk331", LRK331);
 	device.option_add("hpblp", HPBLP);
+	device.option_add("enet16", ISA16_ENET16);
+	device.option_add("insidetrak", ISA16_INSIDETRAK);
+	device.option_add("formatc", ISA16_FORMATC);
+	device.option_add("vid1000", ISA16_VID1000);
+	device.option_add("pix1000", ISA16_PIX1000);
 }

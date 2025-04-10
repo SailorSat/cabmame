@@ -154,6 +154,7 @@ void formatc_device::device_add_mconfig(machine_config &config)
 
 	MCD2(config, m_mcd, 0);
 
+	// todo - this is actually a N80C198
 	P8098(config, m_i80198, FMTC_CONTROL_CLOCK);
 	m_i80198->set_addrmap(AS_PROGRAM, &formatc_device::ctrl_map);
 }
@@ -369,7 +370,8 @@ uint8_t formatc_device::isa_odie_r(offs_t offset)
 		return mcd_r(offset & 3);
 	}
 
-	logerror("formatc: ISA - unhandled ODIE read @ %02x\n", offset);
+	if (!machine().side_effects_disabled())
+		logerror("formatc: ISA - unhandled ODIE read @ %02x\n", offset);
 	return 0xff;
 }
 
@@ -427,7 +429,8 @@ uint8_t formatc_device::sscape_ram0_r(offs_t offset)
 {
 	if (offset < 0x20000)
 		return m_sscape_ram0[offset];
-	logerror("formatc: 68K - unhandled RAM0 read @ %02x\n", offset);
+	if (!machine().side_effects_disabled())
+		logerror("formatc: 68K - unhandled RAM0 read @ %02x\n", offset);
 	return 0xff;
 }
 
@@ -452,7 +455,8 @@ uint8_t formatc_device::sscape_ram1_r(offs_t offset)
 			return m_sscape_simm[offset & 0x3fffff];
 			break;
 	}
-	logerror("formatc: 68K - unhandled RAM1 read @ %02x\n", offset);
+	if (!machine().side_effects_disabled())
+		logerror("formatc: 68K - unhandled RAM1 read @ %02x\n", offset);
 	return 0xff;
 }
 
@@ -484,7 +488,8 @@ void formatc_device::sscape_ram3_w(offs_t offset, uint8_t data)
 
 uint8_t formatc_device::sscape_otto_r(offs_t offset)
 {
-	logerror("formatc: 68K - unhandled OTTO read @ %02x\n", offset);
+	if (!machine().side_effects_disabled())
+		logerror("formatc: 68K - unhandled OTTO read @ %02x\n", offset);
 	return 0xff;
 }
 
@@ -522,7 +527,8 @@ uint8_t formatc_device::odie_reg_r(uint8_t source, offs_t offset)
 			break;
 	}
 
-	logerror("formatc: %1x - ODIE register read %02x = %02x\n", source, offset, result);
+	if (!machine().side_effects_disabled())
+		logerror("formatc: %1x - ODIE register read %02x = %02x\n", source, offset, result);
 	return result;
 }
 
@@ -606,7 +612,8 @@ void formatc_device::update_odie_mode()
 
 uint8_t formatc_device::isa_ctrl_r(offs_t offset)
 {
-	logerror("formatc: ISA - unhandled CTRL read @ %02x\n", offset);
+	if (!machine().side_effects_disabled())
+		logerror("formatc: ISA - unhandled CTRL read @ %02x\n", offset);
 	return 0xff;
 }
 
@@ -663,7 +670,8 @@ uint8_t formatc_device::mcd_r(offs_t offset)
 			result = m_mcd->flag_r();
 			break;
 	}
-	logerror("formatc: MITSUMI read %02x = %02x\n", offset, result);
+	if (!machine().side_effects_disabled())
+		logerror("formatc: MITSUMI read %02x = %02x\n", offset, result);
 	return result;
 }
 

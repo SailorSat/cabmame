@@ -38,12 +38,12 @@ DEFINE_DEVICE_TYPE(ISA16_PIX1000, pix1000_device, "pix1000", "EXPALITY PIX 1000"
 
 void pix1000_device::device_add_mconfig(machine_config &config)
 {
-	//todo -  try MC88100 for now
-	//MC88110(config, m_m88110a, PIX_CLOCK);
-	//m_m88110a->set_addrmap(AS_PROGRAM, &pix1000_device::m88110a_map);
+	//todo - these are actually MC88110
+	MC88100(config, m_m88110a, PIX_CLOCK);
+	m_m88110a->set_addrmap(AS_PROGRAM, &pix1000_device::m88110a_map);
 
-	//MC88110(config, m_m88110b, PIX_CLOCK);
-	//m_m88110b->set_addrmap(AS_PROGRAM, &pix1000_device::m88110b_map);
+	MC88100(config, m_m88110b, PIX_CLOCK);
+	m_m88110b->set_addrmap(AS_PROGRAM, &pix1000_device::m88110b_map);
 }
 
 pix1000_device::pix1000_device(const machine_config& mconfig, const char* tag, device_t* owner, uint32_t clock)
@@ -51,9 +51,9 @@ pix1000_device::pix1000_device(const machine_config& mconfig, const char* tag, d
 	device_isa16_card_interface(mconfig, *this),
 	m_pix_dram(*this, "pix_dram", 0x800000U, ENDIANNESS_LITTLE),
 	m_pix_vram(*this, "pix_vram", 0x400000U, ENDIANNESS_LITTLE),
-	m_fifo(*this, "fifo", 0x800U, ENDIANNESS_LITTLE)
-	//m_m88110a(*this, "m88110a"),
-	//m_m88110a(*this, "m88110b")
+	m_fifo(*this, "fifo", 0x800U, ENDIANNESS_LITTLE),
+	m_m88110a(*this, "m88110a"),
+	m_m88110b(*this, "m88110b")
 {
 }
 
@@ -79,8 +79,8 @@ void pix1000_device::device_reset()
 
 void pix1000_device::device_reset_after_children()
 {
-	//m_m88110a->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
-	//m_m88110b->set_input_line(INPUT_LINE_RESET, ASSERT_LINE); // keep in reset for now...
+	m_m88110a->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
+	m_m88110b->set_input_line(INPUT_LINE_RESET, ASSERT_LINE); // keep in reset for now...
 }
 
 /*************************************************************
@@ -116,7 +116,8 @@ uint8_t pix1000_device::isa_proc_r(offs_t offset)
 			// execute fifo?
 			return 0xdf;
 		default:
-			logerror("pix1000: unhandled proc read @ %02x\n", offset);
+			if (!machine().side_effects_disabled())
+				logerror("pix1000: unhandled proc read @ %02x\n", offset);
 			return 0xff;
 	}
 }
@@ -146,7 +147,8 @@ void pix1000_device::isa_proc_w(offs_t offset, uint8_t data)
 }
 
 uint16_t pix1000_device::isa_fifo_r(offs_t offset, uint16_t mem_mask) {
-	logerror("insidetrak: unhandled fifo read %04X:%04X\n", offset, mem_mask);
+	if (!machine().side_effects_disabled())
+		logerror("insidetrak: unhandled fifo read %04X:%04X\n", offset, mem_mask);
 	return 0xffff;
 }
 
@@ -169,7 +171,8 @@ uint8_t pix1000_device::isa_mem_r(offs_t offset)
 		}
 	}
 
-	logerror("pix1000: unhandled mem read @ %02x / %08x\n", offset, address);
+	if (!machine().side_effects_disabled())
+		logerror("pix1000: unhandled mem read @ %02x / %08x\n", offset, address);
 	return 0xff;
 }
 
@@ -204,7 +207,8 @@ void pix1000_device::m88110b_map(address_map &map)
 
 uint32_t pix1000_device::m88110a_r(offs_t offset, uint32_t mem_mask)
 {
-	logerror("pix1000: unhandled mc88110a read %08x:%08x\n", offset, mem_mask);
+	if (!machine().side_effects_disabled())
+		logerror("pix1000: unhandled mc88110a read %08x:%08x\n", offset, mem_mask);
 	return 0;
 }
 
@@ -216,7 +220,8 @@ void pix1000_device::m88110a_w(offs_t offset, uint32_t data, uint32_t mem_mask)
 
 uint32_t pix1000_device::m88110b_r(offs_t offset, uint32_t mem_mask)
 {
-	logerror("pix1000: unhandled mc88110b read %08x:%08x\n", offset, mem_mask);
+	if (!machine().side_effects_disabled())
+		logerror("pix1000: unhandled mc88110b read %08x:%08x\n", offset, mem_mask);
 	return 0;
 }
 

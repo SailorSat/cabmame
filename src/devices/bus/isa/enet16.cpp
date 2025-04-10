@@ -49,7 +49,7 @@ void enet16_device::device_start()
 	uint8_t mac[6];
 	uint32_t num = machine().rand();
 	memset(m_prom, 0, 32);
-	mac[0] = 0;  // avoid gcc warning
+	mac[0] = 0;
 	mac[1] = 0x80;
 	mac[2] = 0x48;
 	mac[3] = (num >> 16) & 0xff;

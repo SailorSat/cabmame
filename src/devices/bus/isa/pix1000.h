@@ -6,7 +6,7 @@
 #pragma once
 
 #include "isa.h"
-//#include "cpu/m88000/m88000.h"
+#include "cpu/m88000/m88000.h"
 
 #define PIX_CLOCK       XTAL(40'000'000)
 
@@ -41,8 +41,8 @@ private:
 	void map_io();
 	void map_ram();
 
-	//required_device<mc88100_device> m_m88110a;
-	//required_device<mc88100_device> m_m88110b;
+	required_device<mc88100_device> m_m88110a;
+	required_device<mc88100_device> m_m88110b;
 
 	uint32_t m88110a_r(offs_t offset, uint32_t mem_mask);
 	void m88110a_w(offs_t offset, uint32_t data, uint32_t mem_mask);

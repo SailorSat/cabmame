@@ -60,7 +60,8 @@ void vid1000_device::map_io()
 
 uint8_t vid1000_device::isa_port_r(offs_t offset)
 {
-	logerror("vid1000: unhandled port read @ %02x\n", offset);
+	if (!machine().side_effects_disabled())
+		logerror("vid1000: unhandled port read @ %02x\n", offset);
 	return 0xff;
 }
 

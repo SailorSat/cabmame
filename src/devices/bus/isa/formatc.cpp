@@ -4,23 +4,34 @@
 /*
 FORMAT C 20-177-21 Rev C/D
 Virtuality Enterntainment 1993
+
+Status:
+  CTRL - 80C198 programm fails because PUSHA/POPA not implemented. ACH7 is connected to 100Ohm resistor R15 on the back side.
+  SSCAPE - M68K firmware gets uploaded and executed. M68K sets DMA B to A/D record mode, which is supposed to count on the DMA B addres register until it matches 0x0800. this test gets repeated 3 or 4 times, before signaling status 0xff.
+  MITSUMI - seems to work
+
 To-Do:
-  ODIE registers
-    MITSUMI CD-ROM interface
-    SoundScape S-1000
-  actual 80196/80198 emulation (for CTRL stuff)
   make ODIE a standalone device?
+
+  actual 80196/80198 emulation (for CTRL stuff) - currently only works after patching out unimplemented opcodes (PUSHA, POPA)
+  figure out where ACH7 is connected to.
+  EXTINT and T2CLK tied to GND.
+  connected to U59* (8254a, CLK0-CLK1-CLK2 tied together to 10MHz via 33ohm resistor, OUT2 = CLK0-CLK1-CLK2 of U57* (8254b)
+  figure out what U57* (8254b) is connected to...
+  hook up serial port to something
+  get the "FORMAT D" (the box in the cabinet itself) emulated and hooked up.
+
 Notes:
   1x MC68EC000FN8   - Motorola 68000
   1x ES5506         - Ensoniq "OTTO" Wavetable Synth
   1x ES5706         - Ensoniq "ODIE" Host Interface
-  1x CS4508-KL      - Crystal CS4508
+  1x CS4508-KL      - Crystal CS4508 ( might be compatible with CS4248-KL or AD1848KP, as on other soundscapes )
   1x SIMM-4MB       - 30pin SIMM module (4MB)
   1x TC511664BJ-80  - Toshiba 64Kx16 DRAM / 80ns
   1x YMF262-M       - Yamaha OPL3
   1x N80C198        - Intel MCS-96 (8-bit, ROMless)
   1x IDT7132-SA100J - IDE 2Kx8 SRAM / 100ns
-  2x N82C54-2       - Intel Programmable Timer
+  2x uPD71054L-10   - Programmable Timer (clone of Intel 8254)
   1x M27C256B-12XF1 - 32Kx8 EPROM / 120ns
   SU2000: primary card jumpered to no IRQ, I/O 0x210, I/O 330, MEM 0xE0000
           secondary card jumpered to no IRQ, I/O 0x218, I/O 350, MEM 0xE0800
@@ -35,6 +46,14 @@ Notes:
 #include "formatc.h"
 
 #include "speaker.h"
+
+#define LOG_CTRL    (1U << 1)
+#define LOG_SSCAPE  (1U << 2)
+#define LOG_MITSUMI (1U << 3)
+#define LOG_ALL (LOG_CTRL | LOG_SSCAPE | LOG_MITSUMI)
+
+#define VERBOSE (0)
+#include "logmacro.h"
 
 /*************************************
  *
@@ -157,6 +176,18 @@ void formatc_device::device_add_mconfig(machine_config &config)
 	// todo - this is actually a N80C198
 	P8098(config, m_i80198, FMTC_CONTROL_CLOCK);
 	m_i80198->set_addrmap(AS_PROGRAM, &formatc_device::ctrl_map);
+	//m_i80198->m_serial_tx_cb().set(m_formatd, FUNC(...));
+	//m_i80198->serial_w(...)
+
+	PIT8254(config, m_i8254a, 0);
+	m_i8254a->set_clk<0>(FMTC_SSCAPE_CLOCK3);
+	m_i8254a->set_clk<1>(FMTC_SSCAPE_CLOCK3);
+	m_i8254a->set_clk<2>(FMTC_SSCAPE_CLOCK3);
+	m_i8254a->out_handler<2>().set(m_i8254b, FUNC(pit8254_device::write_clk0));
+	m_i8254a->out_handler<2>().append(m_i8254b, FUNC(pit8254_device::write_clk1));
+	m_i8254a->out_handler<2>().append(m_i8254b, FUNC(pit8254_device::write_clk2));
+
+	PIT8254(config, m_i8254b, 0);
 }
 
 formatc_device::formatc_device(const machine_config& mconfig, const char* tag, device_t* owner, uint32_t clock)
@@ -168,7 +199,9 @@ formatc_device::formatc_device(const machine_config& mconfig, const char* tag, d
 	m_m68000(*this, "m68000"),
 	m_es5506(*this, "es5506"),
 	m_mcd(*this, "mcd"),
-	m_i80198(*this, "i80198")
+	m_i80198(*this, "i80198"),
+	m_i8254a(*this, "i8254a"),
+	m_i8254b(*this, "i8254b")
 {
 }
 
@@ -200,7 +233,29 @@ void formatc_device::device_reset()
 void formatc_device::device_reset_after_children()
 {
 	m_m68000->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
-	m_i80198->set_input_line(INPUT_LINE_RESET, ASSERT_LINE); // keep in reset for now...
+
+	// NOP out PUSHA/POPA - probably a bad thing ;)
+	uint8_t *ROM = (uint8_t *)memregion("eprom")->base();
+	if (ROM[0x228d] == 0xf4)
+	{
+		// 2.12 rom
+		ROM[0x228d] = 0xfd;
+		ROM[0x22fc] = 0xfd;
+		ROM[0x230f] = 0xfd;
+		ROM[0x2336] = 0xfd;
+		ROM[0x2338] = 0xfd;
+		ROM[0x233b] = 0xfd;
+	}
+	if (ROM[0x2318] == 0xf4)
+	{
+		// 3.00 rom
+		ROM[0x2318] = 0xfd;
+		ROM[0x23a3] = 0xfd;
+		ROM[0x23b5] = 0xfd;
+		ROM[0x23eb] = 0xfd;
+		ROM[0x23ed] = 0xfd;
+		ROM[0x23f0] = 0xfd;
+	}
 }
 
 /*************************************************************
@@ -256,7 +311,7 @@ void formatc_device::map_dma()
 uint8_t formatc_device::dack_r(int line)
 {
 	// todo
-	logerror("formatc: ISA - unhandled DMA read @ %02x\n", line);
+	LOGMASKED(LOG_SSCAPE, "formatc: ISA - unhandled DMA read @ %02x\n", line);
 	return 0xff;
 }
 
@@ -271,7 +326,7 @@ void formatc_device::dack_w(int line, uint8_t data)
 		which = 1;
 
 	if (which == -1) {
-		logerror("formatc: ISA - unhandled DMA %u write : %02x\n", line, data);
+		LOGMASKED(LOG_SSCAPE, "formatc: ISA - unhandled DMA %u write : %02x\n", line, data);
 		return;
 	}
 
@@ -280,8 +335,7 @@ void formatc_device::dack_w(int line, uint8_t data)
 		drq_w(CLEAR_LINE, which);
 	}
 
-	// TODO - write data to actual sscape memory
-	logerror("formatc: ISA - handled DMA %u write @ %06x : %02x\n", line, m_odie_dma_address[which], data);
+	LOGMASKED(LOG_SSCAPE, "formatc: ISA - handled DMA %u write @ %06x : %02x\n", line, m_odie_dma_address[which], data);
 	m_sscape_ram0[m_odie_dma_address[which]^1] = data;
 	m_odie_dma_address[which]++;
 }
@@ -315,7 +369,7 @@ void formatc_device::drq_w(int state, int which)
 		case 2:
 		case 4:
 			// dma disabled
-			logerror("formatc: ODIE disabled dma got triggered.\n");
+			LOGMASKED(LOG_SSCAPE, "formatc: ODIE disabled dma got triggered.\n");
 			break;
 	}
 }
@@ -371,7 +425,7 @@ uint8_t formatc_device::isa_odie_r(offs_t offset)
 	}
 
 	if (!machine().side_effects_disabled())
-		logerror("formatc: ISA - unhandled ODIE read @ %02x\n", offset);
+		LOGMASKED(LOG_SSCAPE, "formatc: ISA - unhandled ODIE read @ %02x\n", offset);
 	return 0xff;
 }
 
@@ -413,7 +467,7 @@ void formatc_device::isa_odie_w(offs_t offset, uint8_t data)
 		return;
 	}
 
-	logerror("formatc: ISA - unhandled ODIE write @ %02x, %02x\n", offset, data);
+	LOGMASKED(LOG_SSCAPE, "formatc: ISA - unhandled ODIE write @ %02x, %02x\n", offset, data);
 }
 
 void formatc_device::sscape_map(address_map &map)
@@ -430,7 +484,7 @@ uint8_t formatc_device::sscape_ram0_r(offs_t offset)
 	if (offset < 0x20000)
 		return m_sscape_ram0[offset];
 	if (!machine().side_effects_disabled())
-		logerror("formatc: 68K - unhandled RAM0 read @ %02x\n", offset);
+		LOGMASKED(LOG_SSCAPE, "formatc: 68K - unhandled RAM0 read @ %02x\n", offset);
 	return 0xff;
 }
 
@@ -441,7 +495,7 @@ void formatc_device::sscape_ram0_w(offs_t offset, uint8_t data)
 		m_sscape_ram0[offset] = data;
 		return;
 	}
-	logerror("formatc: 68K - unhandled RAM0 write @ %02x, %02x\n", offset, data);
+	LOGMASKED(LOG_SSCAPE, "formatc: 68K - unhandled RAM0 write @ %02x, %02x\n", offset, data);
 }
 
 uint8_t formatc_device::sscape_ram1_r(offs_t offset)
@@ -456,7 +510,7 @@ uint8_t formatc_device::sscape_ram1_r(offs_t offset)
 			break;
 	}
 	if (!machine().side_effects_disabled())
-		logerror("formatc: 68K - unhandled RAM1 read @ %02x\n", offset);
+		LOGMASKED(LOG_SSCAPE, "formatc: 68K - unhandled RAM1 read @ bank %1x %06x\n", m_odie_bank, offset);
 	return 0xff;
 }
 
@@ -471,7 +525,7 @@ void formatc_device::sscape_ram1_w(offs_t offset, uint8_t data)
 			m_sscape_simm[offset & 0x3fffff] = data;
 			return;
 	}
-	logerror("formatc: 68K - unhandled RAM1 write @ %02x, %02x\n", offset, data);
+	LOGMASKED(LOG_SSCAPE, "formatc: 68K - unhandled RAM1 write @ bank %1x - %06x, %02x\n", m_odie_bank, offset, data);
 }
 
 uint8_t formatc_device::sscape_ram3_r(offs_t offset)
@@ -489,13 +543,13 @@ void formatc_device::sscape_ram3_w(offs_t offset, uint8_t data)
 uint8_t formatc_device::sscape_otto_r(offs_t offset)
 {
 	if (!machine().side_effects_disabled())
-		logerror("formatc: 68K - unhandled OTTO read @ %02x\n", offset);
+		LOGMASKED(LOG_SSCAPE, "formatc: 68K - unhandled OTTO read @ %02x\n", offset);
 	return 0xff;
 }
 
 void formatc_device::sscape_otto_w(offs_t offset, uint8_t data)
 {
-	logerror("formatc: 68K - unhandled OTTO write @ %02x, %02x\n", offset, data);
+	LOGMASKED(LOG_SSCAPE, "formatc: 68K - unhandled OTTO write @ %02x, %02x\n", offset, data);
 }
 
 uint8_t formatc_device::sscape_odie_r(offs_t offset)
@@ -528,7 +582,7 @@ uint8_t formatc_device::odie_reg_r(uint8_t source, offs_t offset)
 	}
 
 	if (!machine().side_effects_disabled())
-		logerror("formatc: %1x - ODIE register read %02x = %02x\n", source, offset, result);
+		LOGMASKED(LOG_SSCAPE, "formatc: %1x - ODIE register read %02x = %02x\n", source, offset, result);
 	return result;
 }
 
@@ -558,7 +612,7 @@ void formatc_device::odie_reg_w(uint8_t source, offs_t offset, uint8_t data)
 			break;
 	}
 
-	logerror("formatc: %1x - ODIE register write %02x = %02x\n", source, offset, data);
+	LOGMASKED(LOG_SSCAPE, "formatc: %1x - ODIE register write %02x = %02x\n", source, offset, data);
 }
 
 void formatc_device::trigger_odie_dma(int which)
@@ -613,7 +667,7 @@ void formatc_device::update_odie_mode()
 uint8_t formatc_device::isa_ctrl_r(offs_t offset)
 {
 	if (!machine().side_effects_disabled())
-		logerror("formatc: ISA - unhandled CTRL read @ %02x\n", offset);
+		LOGMASKED(LOG_CTRL, "formatc: ISA - unhandled CTRL read @ %02x\n", offset);
 	return 0xff;
 }
 
@@ -621,7 +675,7 @@ uint8_t formatc_device::isa_ctrl_r(offs_t offset)
 void formatc_device::isa_ctrl_w(offs_t offset, uint8_t data)
 {
 	if (offset == 0x05) map_ram(); // dirty hack to keep memory mapping active
-	logerror("formatc: ISA - unhandled CTRL write @ %02x, %02x\n", offset, data);
+	LOGMASKED(LOG_CTRL, "formatc: ISA - unhandled CTRL write @ %02x, %02x\n", offset, data);
 }
 
 uint8_t formatc_device::isa_mem_r(offs_t offset)
@@ -638,7 +692,8 @@ void formatc_device::ctrl_map(address_map &map)
 {
  // TODO: banking, ram etc.
 	// 0000 - 00ff are internal
-	// 0800 - 0803 82c54 #1
+	map(0x0800, 0x0803).rw(m_i8254a, FUNC(pit8254_device ::read), FUNC(pit8254_device ::write));
+	// 1000 - ??
 	map(0x2000, 0x7fff).rom().region("eprom", 0x2000);
 	map(0x8000, 0x87ff).rw(FUNC(formatc_device::ctrl_mem_r), FUNC(formatc_device::ctrl_mem_w));
 }
@@ -671,13 +726,13 @@ uint8_t formatc_device::mcd_r(offs_t offset)
 			break;
 	}
 	if (!machine().side_effects_disabled())
-		logerror("formatc: MITSUMI read %02x = %02x\n", offset, result);
+		LOGMASKED(LOG_MITSUMI, "formatc: MITSUMI read %02x = %02x\n", offset, result);
 	return result;
 }
 
 void formatc_device::mcd_w(offs_t offset, uint8_t data)
 {
-	logerror("formatc: MITSUMI write %02x = %02x\n", offset, data);
+	LOGMASKED(LOG_MITSUMI, "formatc: MITSUMI write %02x = %02x\n", offset, data);
 	switch (offset) {
 		case 0:
 			m_mcd->cmd_w(data);

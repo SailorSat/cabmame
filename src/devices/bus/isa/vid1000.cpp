@@ -19,6 +19,9 @@ Notes:
 #include "vid1000.h"
 #include "screen.h"
 
+#define VERBOSE (0)
+#include "logmacro.h"
+
 DEFINE_DEVICE_TYPE(ISA16_VID1000, vid1000_device, "vid1000", "EXPALITY VID 1000")
 
 void vid1000_device::device_add_mconfig(machine_config &config)
@@ -61,13 +64,13 @@ void vid1000_device::map_io()
 uint8_t vid1000_device::isa_port_r(offs_t offset)
 {
 	if (!machine().side_effects_disabled())
-		logerror("vid1000: unhandled port read @ %02x\n", offset);
+		LOG("vid1000: unhandled port read @ %02x\n", offset);
 	return 0xff;
 }
 
 void vid1000_device::isa_port_w(offs_t offset, uint8_t data)
 {
-	logerror("vid1000: unhandled port write @ %02x, %02x\n", offset, data);
+	LOG("vid1000: unhandled port write @ %02x, %02x\n", offset, data);
 }
 
 // dummy

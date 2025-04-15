@@ -9,6 +9,7 @@ ToDo:
   everything
 Notes:
   2x  MC88110       - Motorola 88110 CPU
+  1x  MC88915FN70   - Motorola 88915 Clock Driver
   16x TC528257SZ    - Toshiba 256Kx8 VRAM
   16x TC514400AZ    - Toshiba 1Mx4 DRAM
   2x  AM7203A       - 2Kx9 FIFO
@@ -21,6 +22,12 @@ Notes:
 #include "emu.h"
 #include "pix1000.h"
 
+#define LOG_M88K  (1U << 1)
+#define LOG_HOST  (1U << 2)
+#define LOG_ALL (LOG_M88K | LOG_HOST)
+
+#define VERBOSE (0)
+#include "logmacro.h"
 
 static INPUT_PORTS_START( pix1000 )
 	PORT_START("PIX1000_IO_BASE")
@@ -117,7 +124,7 @@ uint8_t pix1000_device::isa_proc_r(offs_t offset)
 			return 0xdf;
 		default:
 			if (!machine().side_effects_disabled())
-				logerror("pix1000: unhandled proc read @ %02x\n", offset);
+				LOGMASKED(LOG_HOST, "pix1000: unhandled proc read @ %02x\n", offset);
 			return 0xff;
 	}
 }
@@ -142,13 +149,13 @@ void pix1000_device::isa_proc_w(offs_t offset, uint8_t data)
 			m_proc_reg3 = data;
 			return;
 		default:
-			logerror("pix1000: unhandled proc write @ %02x, %02x\n", offset, data);
+			LOGMASKED(LOG_HOST, "pix1000: unhandled proc write @ %02x, %02x\n", offset, data);
 	}
 }
 
 uint16_t pix1000_device::isa_fifo_r(offs_t offset, uint16_t mem_mask) {
 	if (!machine().side_effects_disabled())
-		logerror("insidetrak: unhandled fifo read %04X:%04X\n", offset, mem_mask);
+		LOGMASKED(LOG_HOST, "pix1000: unhandled fifo read %04X:%04X\n", offset, mem_mask);
 	return 0xffff;
 }
 
@@ -157,7 +164,7 @@ void pix1000_device::isa_fifo_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 		fifo_push(data);
 		return;
 	}
-	logerror("pix1000: unhandled fifo write %04X;%04X, %04X\n", offset, mem_mask, data);
+	LOGMASKED(LOG_HOST, "pix1000: unhandled fifo write %04X;%04X, %04X\n", offset, mem_mask, data);
 }
 
 uint8_t pix1000_device::isa_mem_r(offs_t offset)
@@ -172,7 +179,7 @@ uint8_t pix1000_device::isa_mem_r(offs_t offset)
 	}
 
 	if (!machine().side_effects_disabled())
-		logerror("pix1000: unhandled mem read @ %02x / %08x\n", offset, address);
+		LOGMASKED(LOG_HOST, "pix1000: unhandled mem read @ %02x / %08x\n", offset, address);
 	return 0xff;
 }
 
@@ -186,7 +193,7 @@ void pix1000_device::isa_mem_w(offs_t offset, uint8_t data)
 		}
 	}
 
-	logerror("pix1000: unhandled mem write @ %02x / %08x, %02x - r0=%02\n", offset, address, data, m_proc_reg0);
+	LOGMASKED(LOG_HOST, "pix1000: unhandled mem write @ %02x / %08x, %02x - r0=%02\n", offset, address, data, m_proc_reg0);
 }
 
 /*************************************************************
@@ -208,26 +215,26 @@ void pix1000_device::m88110b_map(address_map &map)
 uint32_t pix1000_device::m88110a_r(offs_t offset, uint32_t mem_mask)
 {
 	if (!machine().side_effects_disabled())
-		logerror("pix1000: unhandled mc88110a read %08x:%08x\n", offset, mem_mask);
+		LOGMASKED(LOG_M88K, "pix1000: unhandled mc88110a read %08x:%08x\n", offset, mem_mask);
 	return 0;
 }
 
 void pix1000_device::m88110a_w(offs_t offset, uint32_t data, uint32_t mem_mask)
 {
-	logerror("pix1000: unhandled mc88110a write %08x:%08x, %08x\n", offset, mem_mask, data);
+	LOGMASKED(LOG_M88K, "pix1000: unhandled mc88110a write %08x:%08x, %08x\n", offset, mem_mask, data);
 	return;
 }
 
 uint32_t pix1000_device::m88110b_r(offs_t offset, uint32_t mem_mask)
 {
 	if (!machine().side_effects_disabled())
-		logerror("pix1000: unhandled mc88110b read %08x:%08x\n", offset, mem_mask);
+		LOGMASKED(LOG_M88K, "pix1000: unhandled mc88110b read %08x:%08x\n", offset, mem_mask);
 	return 0;
 }
 
 void pix1000_device::m88110b_w(offs_t offset, uint32_t data, uint32_t mem_mask)
 {
-	logerror("pix1000: unhandled mc88110b write %08x:%08x, %08x\n", offset, mem_mask, data);
+	LOGMASKED(LOG_M88K, "pix1000: unhandled mc88110b write %08x:%08x, %08x\n", offset, mem_mask, data);
 	return;
 }
 

@@ -8,6 +8,9 @@
 #include "coreutil.h"
 #include "multibyte.h"
 
+#define VERBOSE (0)
+#include "logmacro.h"
+
 //**************************************************************************
 //  GLOBAL VARIABLES
 //**************************************************************************
@@ -151,7 +154,7 @@ uint8_t mcd2_device::data_r()
 		{
 			m_buf_idx++;
 			m_buf_count--;
-			logerror("m_buf_count = %04x\n", m_buf_count);
+			LOG("m_buf_count = %04x\n", m_buf_count);
 			if(!m_buf_count)
 				read_sector();
 		}
@@ -164,7 +167,7 @@ uint8_t mcd2_device::data_r()
 		else
 		{
 			m_cmdbuf_count--;
-			logerror("m_cmdbbuf_count = %04x\n", m_cmdbuf_count);
+			LOG("m_cmdbbuf_count = %04x\n", m_cmdbuf_count);
 			return m_cmdbuf[m_cmdbuf_idx++];
 		}
 	}
@@ -361,7 +364,7 @@ void mcd2_device::cmd_w(uint8_t data)
 						const auto &toc = m_cdrom_handle->get_toc();
 						uint32_t start = toc.tracks[m_curtoctrk].logframeofs;
 						uint32_t len = toc.tracks[m_curtoctrk].logframes;
-						logerror("tracks = %02x, m_curtoctrk = %02x, start = %04x, len = %04x\n", tracks, m_curtoctrk, start, len);
+						LOG("tracks = %02x, m_curtoctrk = %02x, start = %04x, len = %04x\n", tracks, m_curtoctrk, start, len);
 						len = cdrom_file::lba_to_msf(len);
 						start = cdrom_file::lba_to_msf(start + 150);
 						uint8_t audio = m_cdrom_handle->get_track_type(m_curtoctrk) == cdrom_file::CD_TRACK_AUDIO;
@@ -387,7 +390,7 @@ void mcd2_device::cmd_w(uint8_t data)
 					int cur_track = m_cdrom_handle->get_track(lba);
 					uint32_t start = m_cdrom_handle->get_track_start(cur_track);
 					uint32_t relative = lba - start;
-					logerror("lba = %04x, cur_track = %02x, start = %04x, relative = %04x\n", lba, cur_track, start, relative);
+					LOG("lba = %04x, cur_track = %02x, start = %04x, relative = %04x\n", lba, cur_track, start, relative);
 					relative = cdrom_file::lba_to_msf(relative);
 					m_cmdbuf[0] = STAT_SPIN | STAT_READY;
 					m_cmdbuf[1] = ((m_cdrom_handle->get_adr_control(cur_track) << 4) & 0xf0) | ((cur_track + 1) & 0x0f);

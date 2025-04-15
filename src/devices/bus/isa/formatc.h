@@ -6,10 +6,14 @@
 #pragma once
 
 #include "isa.h"
+
 #include "cpu/m68000/m68000.h"
-#include "sound/es5506.h"
-#include "machine/mcd2.h"
 #include "cpu/mcs96/i8x9x.h"
+
+#include "machine/mcd2.h"
+#include "machine/pit8253.h"
+
+#include "sound/es5506.h"
 
 #define FMTC_SSCAPE_CLOCK1   XTAL(32'000'000)
 #define FMTC_SSCAPE_CLOCK2   XTAL(14'318'181)
@@ -86,6 +90,8 @@ private:
 	required_device<es5506_device> m_es5506;
 	required_device<mcd2_device> m_mcd;
 	required_device<i8x9x_device> m_i80198;
+	required_device<pit8254_device> m_i8254a;
+	required_device<pit8254_device> m_i8254b;
 
 	uint8_t odie_reg_r(uint8_t source, offs_t offset);
 	void odie_reg_w(uint8_t source, offs_t offset, uint8_t data);

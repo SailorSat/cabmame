@@ -4,9 +4,30 @@
 /*
 EXPALITY PIX 1000
 Virtuality Entertainment 1993
-ToDo:
-  88110 emulation :(
-  everything
+
+Status:
+  no 88110 emulation yet.
+
+To-Do:
+  memory map for 88110s (guesswork)
+  0x00000000 - ram 8mb (mirrored)
+  0x10000000 - ?? crash the system
+  0x20000000 - ?? crash the system
+  0x30000000 - vram probably (constantly changing values, writing here on real machine screws up display output)
+  0x40000000 - ?? ram?
+  0x50000000 - ?? ram?
+  0x60000000 - ?? ram?
+  0x70000000 - ?? ram?
+  0x80000000 - ?? crash the system
+
+  ETS MAINA.OUT writes:
+    000000-000fff  regs?
+    04a000-056fe7  code
+
+  ETS MAINB.OUT write:
+    001000-001fff  regs?
+    00a000-015e1f  code
+
 Notes:
   2x  MC88110       - Motorola 88110 CPU
   1x  MC88915FN70   - Motorola 88915 Clock Driver
@@ -21,6 +42,8 @@ Notes:
 */
 #include "emu.h"
 #include "pix1000.h"
+
+#include "multibyte.h"
 
 #define LOG_M88K  (1U << 1)
 #define LOG_HOST  (1U << 2)
@@ -146,7 +169,7 @@ void pix1000_device::isa_proc_w(offs_t offset, uint8_t data)
 			return;
 		case 4:
 			map_ram(); // dirty hack to keep memory mapping active
-			m_proc_reg3 = data;
+			m_proc_reg4 = data;
 			return;
 		default:
 			LOGMASKED(LOG_HOST, "pix1000: unhandled proc write @ %02x, %02x\n", offset, data);
@@ -170,6 +193,7 @@ void pix1000_device::isa_fifo_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 uint8_t pix1000_device::isa_mem_r(offs_t offset)
 {
 	uint32_t address = (m_proc_reg1 << 24) | (m_proc_reg2 << 16) | ( offset & 0xffff );
+	address ^= 1;
 	if (m_proc_reg0 & 0x10) {
 		if (address < 0x00800000) {
 			if ((address == 0x00002101) | (address == 0x00002103))
@@ -186,6 +210,7 @@ uint8_t pix1000_device::isa_mem_r(offs_t offset)
 void pix1000_device::isa_mem_w(offs_t offset, uint8_t data)
 {
 	uint32_t address = (m_proc_reg1 << 24) | (m_proc_reg2 << 16) | ( offset & 0xffff );
+	address ^= 1;
 	if (m_proc_reg0 & 0x10){
 		if (address < 0x00800000) {
 			m_pix_dram[address] = data;
@@ -193,7 +218,7 @@ void pix1000_device::isa_mem_w(offs_t offset, uint8_t data)
 		}
 	}
 
-	LOGMASKED(LOG_HOST, "pix1000: unhandled mem write @ %02x / %08x, %02x - r0=%02\n", offset, address, data, m_proc_reg0);
+	LOGMASKED(LOG_HOST, "pix1000: unhandled mem write @ %02x / %08x, %02x - r0=%02x\n", offset, address, data, m_proc_reg0);
 }
 
 /*************************************************************
@@ -214,6 +239,10 @@ void pix1000_device::m88110b_map(address_map &map)
 
 uint32_t pix1000_device::m88110a_r(offs_t offset, uint32_t mem_mask)
 {
+	uint32_t address = offset << 2;
+	if (address < 0x00800000) {
+		return get_u32be(&m_pix_dram[address]);
+	}
 	if (!machine().side_effects_disabled())
 		LOGMASKED(LOG_M88K, "pix1000: unhandled mc88110a read %08x:%08x\n", offset, mem_mask);
 	return 0;
@@ -221,12 +250,21 @@ uint32_t pix1000_device::m88110a_r(offs_t offset, uint32_t mem_mask)
 
 void pix1000_device::m88110a_w(offs_t offset, uint32_t data, uint32_t mem_mask)
 {
+	uint32_t address = offset << 2;
+	if (address < 0x00800000) {
+		put_u32be(&m_pix_dram[address], data);
+		return;
+	}
 	LOGMASKED(LOG_M88K, "pix1000: unhandled mc88110a write %08x:%08x, %08x\n", offset, mem_mask, data);
 	return;
 }
 
 uint32_t pix1000_device::m88110b_r(offs_t offset, uint32_t mem_mask)
 {
+	uint32_t address = offset << 2;
+	if (address < 0x00800000) {
+		return get_u32be(&m_pix_dram[address]);
+	}
 	if (!machine().side_effects_disabled())
 		LOGMASKED(LOG_M88K, "pix1000: unhandled mc88110b read %08x:%08x\n", offset, mem_mask);
 	return 0;
@@ -234,6 +272,11 @@ uint32_t pix1000_device::m88110b_r(offs_t offset, uint32_t mem_mask)
 
 void pix1000_device::m88110b_w(offs_t offset, uint32_t data, uint32_t mem_mask)
 {
+	uint32_t address = offset << 2;
+	if (address < 0x00800000) {
+		put_u32be(&m_pix_dram[address], data);
+		return;
+	}
 	LOGMASKED(LOG_M88K, "pix1000: unhandled mc88110b write %08x:%08x, %08x\n", offset, mem_mask, data);
 	return;
 }

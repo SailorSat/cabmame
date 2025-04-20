@@ -14,7 +14,8 @@ To-Do:
   make ODIE a standalone device?
 
   actual 80196/80198 emulation (for CTRL stuff) - currently only works after patching out unimplemented opcodes (PUSHA, POPA)
-  figure out where ACH7 is connected to.
+  ACH7 based on the code appears to be the mic input
+  check which HSI/HSO pin is used for security.
   EXTINT and T2CLK tied to GND.
   connected to U59* (8254a, CLK0-CLK1-CLK2 tied together to 10MHz via 33ohm resistor, OUT2 = CLK0-CLK1-CLK2 of U57* (8254b)
   figure out what U57* (8254b) is connected to...
@@ -176,7 +177,8 @@ void formatc_device::device_add_mconfig(machine_config &config)
 	// todo - this is actually a N80C198
 	P8098(config, m_i80198, FMTC_CONTROL_CLOCK);
 	m_i80198->set_addrmap(AS_PROGRAM, &formatc_device::ctrl_map);
-	//m_i80198->m_serial_tx_cb().set(m_formatd, FUNC(...));
+	m_i80198->ach7_cb().set_constant(0x180);
+	//m_i80198->serial_tx_cb().set(m_formatd, FUNC(...));
 	//m_i80198->serial_w(...)
 
 	PIT8254(config, m_i8254a, 0);

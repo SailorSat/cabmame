@@ -59,8 +59,6 @@ Notes:
 
 #include "asio.h"
 
-//#include <atomic>
-//#include <thread>
 #include <iostream>
 
 #define VERBOSE 0
@@ -82,14 +80,13 @@ public:
 	{
 	}
 
-	// emu thread
 	void start()
 	{
 
 		m_thread = std::thread(
 				[this] ()
 				{
-					LOG("M1COMM: Network thread started\n");
+					LOG("M1COMM: network thread started\n");
 					try {
 						m_ioctx.run();
 					} catch (const std::exception& e) {
@@ -97,11 +94,10 @@ public:
 					} catch (...) { // Catch any other unknown exceptions
 						LOG("M1COMM: Unknown exception in network thread\n");
 					}
-			LOG("M1COMM: Network thread completed\n");
+					LOG("M1COMM: network thread completed\n");
 				});
 	}
 
-	// emu thread
 	void reset(std::string localhost, std::string localport, std::string remotehost, std::string remoteport)
 	{
 		m_ioctx.post(
@@ -143,7 +139,6 @@ public:
 		}
 	}
 
-	// emu thread
 	void stop()
 	{
 		m_ioctx.post(
@@ -167,7 +162,6 @@ public:
 		}
 	}
 
-	// emu thread
 	void check_sockets()
 	{
 		// start acceptor if needed
@@ -191,13 +185,11 @@ public:
 		}
 	}
 
-	// emu thread
 	bool connected()
 	{
 		return m_state_rx.load() == 2 && m_state_tx.load() == 2;
 	}
 
-	// emu thread
 	unsigned receive(uint8_t *buffer, unsigned data_size)
 	{
 		if (m_state_rx.load() < 2)
@@ -209,7 +201,6 @@ public:
 		return m_fifo_rx.read(&buffer[0], data_size, false);
 	}
 
-	// emu_thread
 	unsigned send(uint8_t *buffer, unsigned data_size)
 	{
 		if (m_state_tx.load() < 2)
@@ -317,7 +308,6 @@ private:
 		std::mutex m_mutex;
 	};
 
-	// asio thread
 	void start_accept()
 	{
 		std::error_code err;
@@ -363,7 +353,6 @@ private:
 		}
 	}
 
-	// asio thread
 	void start_connect()
 	{
 		std::error_code err;
@@ -409,7 +398,6 @@ private:
 		}
 	}
 
-	// asio thread
 	void start_send_tx()
 	{
 		unsigned used = m_fifo_tx.read(&m_buffer_tx[0], std::min<unsigned>(m_fifo_tx.used(), m_buffer_tx.size()), true);
@@ -432,7 +420,6 @@ private:
 				});
 	}
 
-	// asio thread
 	void start_receive_rx()
 	{
 		m_sock_rx.async_read_some(

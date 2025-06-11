@@ -63,7 +63,7 @@ Notes:
 //#include <thread>
 #include <iostream>
 
-#define VERBOSE 1
+#define VERBOSE 0
 #include "logmacro.h"
 
 #define Z80_TAG "commcpu"
@@ -402,7 +402,6 @@ private:
 						else
 						{
 							LOG("M1COMM: TX connection established\n");
-							m_timeout_tx.cancel();
 							m_state_tx.store(2);
 						}
 					});
@@ -486,8 +485,8 @@ private:
 	std::atomic_uint m_state_tx;
 	fifo m_fifo_rx;
 	fifo m_fifo_tx;
-	std::array<uint8_t, 0x1000> m_buffer_rx;
-	std::array<uint8_t, 0x1000> m_buffer_tx;
+	std::array<uint8_t, 0x200> m_buffer_rx;
+	std::array<uint8_t, 0x200> m_buffer_tx;
 };
 #endif
 

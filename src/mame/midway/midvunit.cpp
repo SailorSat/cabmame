@@ -676,7 +676,9 @@ void midvunit_state::midvunit_map(address_map &map)
 	map(0x994000, 0x994000).w(FUNC(midvunit_state::control_w));
 	map(0x995000, 0x995000).rw(FUNC(midvunit_state::wheel_board_r), FUNC(midvunit_state::wheel_board_w));
 	map(0x995020, 0x995020).w(FUNC(midvunit_state::cmos_protect_w));
-	map(0x997000, 0x997008).rw(FUNC(midvunit_state::comcs_r), FUNC(midvunit_state::comcs_w));
+//  map(0x997000, 0x997008).rw(FUNC(midvunit_state::comcs_r), FUNC(midvunit_state::comcs_w));
+	map(0x997000, 0x997000).rw(m_comm, FUNC(midway_vunit_comm_device::data_r), FUNC(midway_vunit_comm_device::data_w));
+	map(0x997001, 0x997001).rw(m_comm, FUNC(midway_vunit_comm_device::flags_r), FUNC(midway_vunit_comm_device::flags_w));
 	map(0x9a0000, 0x9a0000).w(FUNC(midvunit_state::sound_w));
 	map(0x9c0000, 0x9c1fff).rw(FUNC(midvunit_state::cmos_r), FUNC(midvunit_state::cmos_w)).share(m_nvram);
 	map(0x9e0000, 0x9e7fff).ram().w(FUNC(midvunit_state::paletteram_w)).share(m_paletteram);
@@ -1176,6 +1178,8 @@ void midvunit_state::midvunit(machine_config &config)
 	m_adc->ch1_callback().set_ioport("WHEEL");
 	m_adc->ch2_callback().set_ioport("ACCEL");
 	m_adc->ch3_callback().set_ioport("BRAKE");
+
+	MIDWAY_VUNIT_COMM(config, m_comm, 0);
 
 	// sound hardware
 	SPEAKER(config, "mono").front_center();
@@ -2185,6 +2189,8 @@ void crusnusa_state::init_crusnusa_common(offs_t speedup)
 	// speedups
 	m_maincpu->space(AS_PROGRAM).install_read_handler(speedup, speedup + 1, read32sm_delegate(*this, FUNC(crusnusa_state::generic_speedup_r)));
 	m_generic_speedup = m_ram_base + speedup;
+
+	m_comm->set_linktype(1);
 }
 
 void crusnusa_state::init_crusnusa()  { init_crusnusa_common(0xc93e); }
@@ -2202,6 +2208,8 @@ void crusnwld_state::init_crusnwld_common(offs_t speedup)
 		m_maincpu->space(AS_PROGRAM).install_read_handler(speedup, speedup + 1, read32sm_delegate(*this, FUNC(crusnwld_state::generic_speedup_r)));
 		m_generic_speedup = m_ram_base + speedup;
 	}
+
+	m_comm->set_linktype(2);
 }
 
 void crusnwld_state::init_crusnwld()  { init_crusnwld_common(0xd4c0); }
@@ -2217,6 +2225,8 @@ void crusnwld_state::init_offroadc()
 	// speedups
 	m_maincpu->space(AS_PROGRAM).install_read_handler(0x195aa, 0x195aa, read32sm_delegate(*this, FUNC(crusnwld_state::generic_speedup_r)));
 	m_generic_speedup = m_ram_base + 0x195aa;
+
+	m_comm->set_linktype(3);
 }
 
 

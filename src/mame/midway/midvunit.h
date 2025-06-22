@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "midvunit_comm.h"
 #include "midwayic.h"
 
 #include "dcs.h"
@@ -139,6 +140,7 @@ protected:
 	midvunit_state(const machine_config &mconfig, device_type type, const char *tag)
 		: midvunit_base_state(mconfig, type, tag)
 		, m_adc(*this, "adc")
+		, m_comm(*this, "vunit_comm")
 		, m_nvram(*this, "nvram")
 		, m_optional_drivers(*this, "lamp%u", 0U)
 		, m_wheel_motor(*this, "wheel")
@@ -167,6 +169,7 @@ protected:
 	void midvunit_map(address_map &map) ATTR_COLD;
 
 	required_device<adc0844_device> m_adc;
+	required_device<midway_vunit_comm_device> m_comm;
 
 	required_shared_ptr<uint32_t> m_nvram;
 

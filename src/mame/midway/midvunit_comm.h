@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include "cpu/tms32031/tms32031.h"
+
 #include "asio.h"
 
 
@@ -30,6 +32,9 @@ protected:
 	virtual void device_start() override ATTR_COLD;
 	virtual void device_stop() override ATTR_COLD;
 	virtual void device_reset() override ATTR_COLD;
+
+	required_device<tms32031_device> m_maincpu;
+
 
 private:
 	asio::io_context m_ioctx;

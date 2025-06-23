@@ -17,6 +17,7 @@ DEFINE_DEVICE_TYPE(MIDWAY_VUNIT_COMM, midway_vunit_comm_device, "vunit_comm", "M
 
 midway_vunit_comm_device::midway_vunit_comm_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock) :
 	device_t(mconfig, MIDWAY_VUNIT_COMM, tag, owner, clock),
+	m_maincpu(*this, "^maincpu"),
 	m_acceptor(m_ioctx),
 	m_sock_rx(m_ioctx),
 	m_sock_tx(m_ioctx),
@@ -176,6 +177,7 @@ uint32_t midway_vunit_comm_device::data_r_crusnusa()
 {
 	uint8_t offset = 0;
 	uint32_t result = 0;
+	osd_printf_verbose("TEST TEST TEST %08x.\n", m_maincpu->pc());
 	switch (m_linkstate)
 	{
 		case 0x10:
@@ -212,7 +214,7 @@ uint32_t midway_vunit_comm_device::data_r_crusnusa()
 			osd_printf_verbose("VUNIT_COMM: read %02x.@ %d\n", m_link_buffer[1][offset], offset);
 			result = m_link_buffer[1][offset] << 16;
 			if ((offset % 2))
-				result |= 0x04000000;
+				result |= 0x02000000;
 			m_readcount++;
 			if (m_readcount == 2)
 			{

@@ -473,8 +473,8 @@ void midway_vunit_comm_device::flags_w_crusnusa(uint32_t data)
 
 uint32_t midway_vunit_comm_device::data_r_crusnwld()
 {
-		uint8_t offset = 0;
-	uint32_t result = 0;
+	//uint8_t offset = 0;
+	//uint32_t result = 0;
 	switch (m_linkstate)
 	{
 		case 0x10:
@@ -573,7 +573,7 @@ void midway_vunit_comm_device::data_w_crusnwld(uint32_t data)
 		}
 	}
 
-	uint8_t offset = 0;
+	//uint8_t offset = 0;
 	switch (m_linkstate)
 	{
 		case 0x10:

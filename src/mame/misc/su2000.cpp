@@ -48,14 +48,16 @@
 
 #include "emu.h"
 
-#include "pcshare.h"
+#include "bus/isa/isa_cards.h"
+#include "bus/pc_kbd/keyboards.h"
+#include "bus/pc_kbd/pc_kbdc.h"
 
 #include "cpu/i386/i386.h"
-#include "cpu/tms32031/tms32031.h"
+
+#include "machine/at.h"
 #include "machine/ds128x.h"
-#include "machine/idectrl.h"
-#include "machine/pckeybrd.h"
-#include "video/pc_vga.h"
+#include "machine/nvram.h"
+#include "machine/ram.h"
 
 
 namespace {
@@ -67,9 +69,6 @@ namespace {
  *************************************/
 
 #define I486_CLOCK          33000000
-#define MC68000_CLOCK       XTAL(10'000'000)
-#define TMS320C1_CLOCK      XTAL(33'833'000)
-#define MC88110_CLOCK       XTAL(40'000'000)
 
 
 /*************************************
@@ -78,17 +77,28 @@ namespace {
  *
  *************************************/
 
-class su2000_state : public pcat_base_state
+class su2000_state : public driver_device
 {
 public:
-	su2000_state(const machine_config &mconfig, device_type type, const char *tag)
-		: pcat_base_state(mconfig, type, tag){ }
+	su2000_state(const machine_config &mconfig, device_type type, const char *tag) :
+			driver_device(mconfig, type, tag),
+			m_maincpu(*this, "maincpu"),
+			m_mb(*this, "mb"),
+			m_ram(*this, RAM_TAG)
+		{ }
 
 	void su2000(machine_config &config);
+	void init_at();
 
-private:
-	void pcat_io(address_map &map) ATTR_COLD;
-	void pcat_map(address_map &map) ATTR_COLD;
+protected:
+	required_device<cpu_device> m_maincpu;
+	required_device<at_mb_device> m_mb;
+	required_device<ram_device> m_ram;
+
+	void init_at_common(int xmsbase);
+
+	void at32_io(address_map &map) ATTR_COLD;
+	void at32_map(address_map &map) ATTR_COLD;
 };
 
 
@@ -98,20 +108,20 @@ private:
  *
  *************************************/
 
-void su2000_state::pcat_map(address_map &map)
+void su2000_state::at32_map(address_map &map)
 {
-	map(0x00000000, 0x0009ffff).ram();
-	map(0x000a0000, 0x000bffff).rw("vga", FUNC(vga_device::mem_r), FUNC(vga_device::mem_w));
-	map(0x000c0000, 0x000c7fff).rom();
-	map(0x000f0000, 0x000fffff).rom();
-	map(0x00100000, 0x003fffff).ram();
-	map(0xffff0000, 0xffffffff).rom().region("maincpu", 0x0f0000);
+	map.unmap_value_low();
+	map(0x00000000, 0x0009ffff).bankrw("bank10");
+	map(0x000c0000, 0x000c7fff).rom().region("vgax", 0);
+	map(0x000f0000, 0x000fffff).rom().region("bios", 0);
+	map(0x00800000, 0x00800bff).ram().share("nvram");
+	map(0xffff0000, 0xffffffff).rom().region("bios", 0);
 }
 
-void su2000_state::pcat_io(address_map &map)
+void su2000_state::at32_io(address_map &map)
 {
-	pcat32_io_common(map);
-	map(0x03b0, 0x03df).m("vga", FUNC(vga_device::io_map));
+	map.unmap_value_high();
+	map(0x0000, 0x00ff).m(m_mb, FUNC(at_mb_device::map));
 }
 
 
@@ -145,41 +155,68 @@ static void ide_interrupt(device_t *device, int state)
 
 void su2000_state::su2000(machine_config &config)
 {
-	/* Basic machine hardware */
-	I486(config, m_maincpu, I486_CLOCK);
-	m_maincpu->set_addrmap(AS_PROGRAM, &su2000_state::pcat_map);
-	m_maincpu->set_addrmap(AS_IO, &su2000_state::pcat_io);
-	m_maincpu->set_irq_acknowledge_callback("pic8259_1", FUNC(pic8259_device::inta_cb));
+	i486_device &maincpu(I486(config, m_maincpu, I486_CLOCK));
+	maincpu.set_addrmap(AS_PROGRAM, &su2000_state::at32_map);
+	maincpu.set_addrmap(AS_IO, &su2000_state::at32_io);
+	maincpu.set_irq_acknowledge_callback("mb:pic8259_master", FUNC(pic8259_device::inta_cb));
 
-#if 0
-	tms32031_device &tracker(TMS32031(config, "tracker", TMS320C1_CLOCK));
-	tracker.set_addrmap(AS_PROGRAM, &su2000_state::tracker_map);
+	config.set_maximum_quantum(attotime::from_hz(60));
 
-	mc88100_device &pix_cpu1(MC88110(config, "pix_cpu1", MC88110_CLOCK));
-	pix_cpu1.set_addrmap(AS_PROGRAM, &su2000_state::pix_cpu_a);
+	AT_MB(config, m_mb);
+	m_mb->kbd_clk().set("kbd", FUNC(pc_kbdc_device::clock_write_from_mb));
+	m_mb->kbd_data().set("kbd", FUNC(pc_kbdc_device::data_write_from_mb));
 
-	mc88100_device &pix_cpu2(MC88110(config, "pix_cpu2", MC88110_CLOCK));
-	pix_cpu2.set_addrmap(AS_PROGRAM, &su2000_state::pix_cpu_b);
+	NVRAM(config, "nvram", nvram_device::DEFAULT_ALL_0);
 
-	m68000_device &format_c(M68000(config, "format_c", XTAL(10'000'000)));
-	format_c.set_addrmap(AS_PROGRAM, &su2000_state::formatc_map);
-#endif
+	// on-board devices on SBC
+	ISA16_SLOT(config, "board1", 0, "mb:isabus", pc_isa16_cards, "fdcsmc", true); // FIXME: deteremine ISA bus clock
+	ISA16_SLOT(config, "board2", 0, "mb:isabus", pc_isa16_cards, "comat", true);
+	ISA16_SLOT(config, "board3", 0, "mb:isabus", pc_isa16_cards, "ide", true);
+	ISA16_SLOT(config, "board4", 0, "mb:isabus", pc_isa16_cards, "lpt", true);
+	// ISA slots
+	ISA16_SLOT(config, "isa1", 0, "mb:isabus", pc_isa16_cards, "svga_et4k", false);
+	ISA16_SLOT(config, "isa2", 0, "mb:isabus", pc_isa16_cards, "enet16", false);
+	ISA16_SLOT(config, "isa3", 0, "mb:isabus", pc_isa16_cards, "formatc", false);
+	ISA16_SLOT(config, "isa4", 0, "mb:isabus", pc_isa16_cards, "insidetrak", false);
+	ISA16_SLOT(config, "isa5", 0, "mb:isabus", pc_isa16_cards, "pix1000", false);
+	ISA16_SLOT(config, "isa6", 0, "mb:isabus", pc_isa16_cards, "vid1000", false);
 
-	/* Video hardware */
-	// TODO: Hualon ISA custom
-	screen_device &screen(SCREEN(config, "screen", SCREEN_TYPE_RASTER));
-	screen.set_raw(25.1748_MHz_XTAL, 900, 0, 640, 526, 0, 480);
-	screen.set_screen_update("vga", FUNC(vga_device::screen_update));
+	pc_kbdc_device &pc_kbdc(PC_KBDC(config, "kbd", pc_at_keyboards, STR_KBD_MICROSOFT_NATURAL));
+	pc_kbdc.out_clock_cb().set(m_mb, FUNC(at_mb_device::kbd_clk_w));
+	pc_kbdc.out_data_cb().set(m_mb, FUNC(at_mb_device::kbd_data_w));
 
-	vga_device &vga(VGA(config, "vga", 0));
-	vga.set_screen("screen");
-	vga.set_vram_size(0x100000);
+	ds12885_device &rtc(DS12885(config.replace(), "mb:rtc"));
+	rtc.irq().set("mb:pic8259_slave", FUNC(pic8259_device::ir0_w));
+	rtc.set_century_index(0x32);
 
-	pcat_common(config);
+	/* internal ram */
+	RAM(config, m_ram).set_default_size("4M");
+}
 
-	DS12885(config.replace(), m_mc146818); // TODO: Rename m_mc146818 to m_rtc
-	m_mc146818->irq().set("pic8259_2", FUNC(pic8259_device::ir0_w));
-	m_mc146818->set_century_index(0x32);
+
+/**********************************************************
+ *
+ * Init functions
+ *
+ **********************************************************/
+
+void su2000_state::init_at_common(int xmsbase)
+{
+	address_space& space = m_maincpu->space(AS_PROGRAM);
+
+	/* managed RAM */
+	membank("bank10")->set_base(m_ram->pointer());
+
+	if (m_ram->size() > xmsbase)
+	{
+		offs_t ram_limit = 0x100000 + m_ram->size() - xmsbase;
+		space.install_ram(0x100000,  ram_limit - 1, m_ram->pointer() + xmsbase);
+	}
+}
+
+void su2000_state::init_at()
+{
+	init_at_common(0xa0000);
 }
 
 
@@ -190,18 +227,13 @@ void su2000_state::su2000(machine_config &config)
  *************************************/
 
 ROM_START( su2000 )
-	ROM_REGION(0x100000, "maincpu", 0)
-	ROM_LOAD("hmc86304_bios_v208.u7",       0xc0000, 0x08000, CRC(c6c32f1a) SHA1(a07ade7f0567e1978cd8cee73c6a5d7b5e5f947f) )
-	ROM_LOAD("amibios_486dx_isa_bios.u32",  0xf0000, 0x10000, CRC(811d3639) SHA1(a64d6026c16ac8c79f22b2c241f149402449fafb) )
+	ROM_REGION32_LE(0x010000, "bios", 0)
+	//ROM_LOAD("amibios_486dx_isa_bios.u32",  0x00000, 0x10000, CRC(811d3639) SHA1(a64d6026c16ac8c79f22b2c241f149402449fafb) )
+	ROM_LOAD("amibios_486dx_isa_bios_aa4025963.bin", 0x00000, 0x10000, CRC(65558d9e) SHA1(2e2840665d069112a2c7169afec687ad03449295) )
+	//ROM_LOAD("amibios-486dx-1992-aa8707058-m27c512.bin", 0x00000, 0x10000, CRC(a2b3e326) SHA1(b29c5668fb3337893ef3a96f053f90b929bac0d6) )
 
-
-	ROM_REGION32_LE(0x1000000, "tracker", 0)
-	ROM_LOAD32_WORD("ver_151_03_u16.u16",   0x00000, 0x20000, CRC(8354d059) SHA1(a88df7cc259c1c39316cc3bff9e08aa4e8d3d2c0) )
-	ROM_LOAD32_WORD("ver_151_03_u17.u17",   0x00002, 0x20000, CRC(ace4081d) SHA1(f57287ded53f8d127bcdc9e34b8adb356fe55e5e) )
-
-	ROM_REGION(0x8000, "format", 0)
-	ROM_LOAD("wfc062_212.u62",              0x00000, 0x08000, CRC(9a6b553a) SHA1(7045f733446866ee3171e175e1b22d9384fda1b5) )
-
+	ROM_REGION32_LE(0x008000, "vgax", 0)
+	ROM_LOAD("hmc86304_bios_v208.u7",       0x00000, 0x08000, CRC(c6c32f1a) SHA1(a07ade7f0567e1978cd8cee73c6a5d7b5e5f947f) )
 
 	ROM_REGION(0x8000, "pals", 0)
 	/**********/
@@ -299,4 +331,4 @@ ROM_END
  *
  *************************************/
 
-GAME( 1993, su2000, 0, su2000, 0, su2000_state, empty_init, ROT0, "Virtuality", "SU2000", MACHINE_IS_BIOS_ROOT | MACHINE_NOT_WORKING | MACHINE_NO_SOUND )
+GAME( 1993, su2000, 0, su2000, 0, su2000_state, init_at, ROT0, "Virtuality", "SU2000", MACHINE_IS_BIOS_ROOT | MACHINE_NOT_WORKING | MACHINE_NO_SOUND )

@@ -247,7 +247,7 @@ u8 i8x9x_device::sbuf_r()
 
 void i8x9x_device::watchdog_w(u8 data)
 {
-	logerror("watchdog %02x (%04x)\n", data, PPC);
+	//logerror("watchdog %02x (%04x)\n", data, PPC);
 }
 
 u16 i8x9x_device::timer1_r()

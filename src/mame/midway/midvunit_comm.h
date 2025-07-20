@@ -1,7 +1,7 @@
 // license:BSD-3-Clause
 // copyright-holders:Ariane Fugmann
-#ifndef MAME_MIDWAY_VUNIT_COMM_H
-#define MAME_MIDWAY_VUNIT_COMM_H
+#ifndef MAME_MIDWAY_MIDVUNIT_COMM_H
+#define MAME_MIDWAY_MIDVUNIT_COMM_H
 
 #pragma once
 
@@ -85,4 +85,4 @@ private:
 // device type definition
 DECLARE_DEVICE_TYPE(MIDWAY_VUNIT_COMM, midway_vunit_comm_device)
 
-#endif  // MAME_MIDWAY_VUNIT_COMM_H
+#endif  // MAME_MIDWAY_MIDVUNIT_COMM_H

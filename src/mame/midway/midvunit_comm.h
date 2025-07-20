@@ -61,6 +61,8 @@ private:
 	uint8_t m_flags = 0;
 	uint8_t m_readcount = 0;
 
+	uint8_t m_intcount = 0;
+
 	uint32_t data_r_crusnusa();
 	void data_w_crusnusa(uint32_t data);
 	void flags_w_crusnusa(uint32_t data);
@@ -68,6 +70,8 @@ private:
 	uint32_t data_r_crusnwld();
 	void data_w_crusnwld(uint32_t data);
 	void flags_w_crusnwld(uint32_t data);
+
+	void send_vsync(uint8_t state);
 
 	void check_sockets();
 	void comm_start();

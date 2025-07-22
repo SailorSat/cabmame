@@ -42,6 +42,8 @@ void midway_vunit_comm_device::device_reset()
 	m_flags = 0;
 
 	m_intcount = 0;
+
+	osd_printf_verbose("---\n");
 }
 
 void midway_vunit_comm_device::device_stop()
@@ -87,14 +89,30 @@ void midway_vunit_comm_device::set_linktype(uint8_t linktype)
 		case 2:
 			// Cruis'n World
 			osd_printf_verbose("VUNIT_COMM: set mode 'Cruis'n World'\n");
-			for (int i = 0; i < 4; i++)
+			for (int i = 0; i < 2; i++)
 			{
 				m_link_offset[i] = 2;
-				m_link_length[i] = 3;
+				m_link_length[i] = 19;
 
-				m_link_buffer[i][0] = i + 1;
-				m_link_buffer[i][1] = 3;
-				m_link_buffer[i][2] = 0xa5;
+				m_link_buffer[i][0] = i + 1; // link id
+				m_link_buffer[i][1] = 19;    // message size
+				m_link_buffer[i][2] = 0x06;  // head.words
+				m_link_buffer[i][3] = 0xff;  // head.unk
+				m_link_buffer[i][4] = 0xf9;  // head.checksum
+				m_link_buffer[i][5] = 0x03;  // data 1a...
+				m_link_buffer[i][6] = 0x01;  // data 1b...
+				m_link_buffer[i][7] = 0x00;  // data 2a...
+				m_link_buffer[i][8] = 0x00;  // data 2b...
+				m_link_buffer[i][9] = 0x00;  // data 3a...
+				m_link_buffer[i][10] = 0x00; // data 3b...
+				m_link_buffer[i][11] = 0x00; // data 4a...
+				m_link_buffer[i][12] = 0x00; // data 4b...
+				m_link_buffer[i][13] = 0x00; // data 5a...
+				m_link_buffer[i][14] = 0x2b; // data 5b...
+				m_link_buffer[i][15] = 0x64; // data 6a...
+				m_link_buffer[i][16] = 0x00; // data 6b...
+				m_link_buffer[i][17] = 0x00; // tail
+				m_link_buffer[i][18] = 0x93; // tail
 			}
 			break;
 		case 3:
@@ -112,25 +130,28 @@ uint32_t midway_vunit_comm_device::data_r()
 	if (machine().side_effects_disabled())
 		return 0;
 
-	osd_printf_verbose("data_r %08x.\n", m_maincpu->pc());
-
+	uint32_t result;
 	switch (m_linktype)
 	{
 		case 1:
-			return data_r_crusnusa();
+			result = data_r_crusnusa();
+			break;
 
 		case 2:
-			return data_r_crusnwld();
+			result = data_r_crusnwld();
+			break;
 
 		default:
-			return 0;
+			result = 0;
+			break;
 	}
+
+	osd_printf_verbose("data_r : %08x @ %08x.\n", result, m_maincpu->pc());
+	return result;
 }
 
 void midway_vunit_comm_device::data_w(uint32_t data)
 {
-	osd_printf_verbose("data_w %08x.\n", m_maincpu->pc());
-
 	switch (m_linktype)
 	{
 		case 1:
@@ -146,20 +167,39 @@ void midway_vunit_comm_device::data_w(uint32_t data)
 			break;
 	}
 
+	osd_printf_verbose("data_w : %08x @ %08x.\n", data, m_maincpu->pc());
+
 	m_data = data >> 16;
 }
 
 uint32_t midway_vunit_comm_device::flags_r()
 {
+	if (machine().side_effects_disabled())
+		return 0;
+
+	osd_printf_verbose("flags_r: %08x @ %08x.\n", 0, m_maincpu->pc());
+
 	// does that even get called?
-	if (!machine().side_effects_disabled())
-		logerror("flags_r() got called.");
+	logerror("flags_r() got called.");
+	machine().debug_break();
 	return 0;
 }
 
 void midway_vunit_comm_device::flags_w(uint32_t data)
 {
-	osd_printf_verbose("flags_w %08x.\n", m_maincpu->pc());
+	uint8_t tmp = data >> 24;
+	if (tmp == 0xf0)
+	{
+		osd_printf_verbose("fake INT2 assert\n");
+		m_maincpu->set_input_line(2, ASSERT_LINE);
+		return;
+	}
+	else if (tmp == 0x0f)
+	{
+		osd_printf_verbose("fake INT2 clear\n");
+		m_maincpu->set_input_line(2, CLEAR_LINE);
+		return;
+	}
 
 	switch (m_linktype)
 	{
@@ -176,6 +216,8 @@ void midway_vunit_comm_device::flags_w(uint32_t data)
 			break;
 	}
 
+	osd_printf_verbose("flags_w: %08x @ %08x.\n", data, m_maincpu->pc());
+
 	m_flags = data >> 24;
 }
 
@@ -183,13 +225,13 @@ uint32_t midway_vunit_comm_device::data_r_crusnusa()
 {
 	switch (m_linkstate)
 	{
-		case 0x16:
-		case 0x24:
+		case 0x106:
+		case 0x204:
 			// do NOT recv data while reading from buffer.
 			break;
 
-		case 0x13:
-		case 0x27:
+		case 0x103:
+		case 0x207:
 			// do NOT send data while writing to buffer.
 			break;
 
@@ -202,37 +244,35 @@ uint32_t midway_vunit_comm_device::data_r_crusnusa()
 	uint32_t result = 0;
 	switch (m_linkstate)
 	{
-		case 0x10:
+		case 0x100:
 			// comms idle
 			return 0x01000000;
 
-		case 0x11:
+		case 0x101:
 			// ready to send
 			return 0x00000000;
 			
-		case 0x12:
+		case 0x102:
 			// prep send
 			return 0x02000000;
 
-		case 0x13:
+		case 0x103:
 			// end of send
-			osd_printf_verbose("VUNIT_COMM: 13 to 14.\n");
-			m_linkstate = 0x14;
+			set_linkstate(0x104);
 			return 0x00000000;
 
-		case 0x15:
+		case 0x105:
 			// start receive
 			m_readcount++;
 			if (m_readcount == 3)
 			{
+				set_linkstate(0x106);
 				m_readcount = 0;
 				m_link_offset[1] = 2;
-				osd_printf_verbose("VUNIT_COMM: 15 to 16.\n");
-				m_linkstate = 0x16;
 			}
 			return 0x02000000;
 
-		case 0x16:
+		case 0x106:
 			offset = m_link_offset[1];
 			osd_printf_verbose("VUNIT_COMM: read %02x.@ %u\n", m_link_buffer[1][offset], offset);
 			result = m_link_buffer[1][offset] << 16;
@@ -246,41 +286,39 @@ uint32_t midway_vunit_comm_device::data_r_crusnusa()
 			}
 			if (m_link_offset[1] >= m_link_length[1])
 			{
-				osd_printf_verbose("VUNIT_COMM: 16 to 17.\n");
-				m_linkstate = 0x17;
+				set_linkstate(0x107);
+				m_linkstate = 0x107;
 			}
 			return result;
 
-		case 0x17:
-			osd_printf_verbose("VUNIT_COMM: 17 to 10.\n");
-			m_linkstate = 0x10;
+		case 0x107:
+			set_linkstate(0x100);
 			return 0x02000000;
 
-		case 0x20:
+		case 0x200:
 			// comms idle
 			return 0x00000000;
 
-		case 0x21:
+		case 0x201:
 			// ready to receive
 			return 0x04000000;
 
-		case 0x22:
+		case 0x202:
 			// prep receive
 			return 0x00000000;
 
-		case 0x23:
+		case 0x203:
 			// start receive
 			m_readcount++;
 			if (m_readcount == 3)
 			{
 				m_readcount = 0;
 				m_link_offset[0] = 2;
-				osd_printf_verbose("VUNIT_COMM: 23 to 24.\n");
-				m_linkstate = 0x24;
+				set_linkstate(0x204);
 			}
 			return 0x04000000;
 
-		case 0x24:
+		case 0x204:
 			offset = m_link_offset[0];
 			osd_printf_verbose("VUNIT_COMM: read %02x.@ %u\n", m_link_buffer[0][offset], offset);
 			result = m_link_buffer[0][offset] << 16;
@@ -294,17 +332,15 @@ uint32_t midway_vunit_comm_device::data_r_crusnusa()
 			}
 			if (m_link_offset[0] >= m_link_length[0])
 			{
-				osd_printf_verbose("VUNIT_COMM: 24 to 25.\n");
-				m_linkstate = 0x25;
+				set_linkstate(0x205);
 			}
 			return result;
 
-		case 0x26:
+		case 0x206:
 			return 0x04000000;
 
-		case 0x27:
-			osd_printf_verbose("VUNIT_COMM: 27 to 28.\n");
-			m_linkstate = 0x28;
+		case 0x207:
+			set_linkstate(0x208);
 			return 0x00000000;
 
 		default:
@@ -328,14 +364,14 @@ void midway_vunit_comm_device::data_w_crusnusa(uint32_t data)
 		if ((ctrl & 0xf0) == 0xc0)
 		{
 			m_linkid = 1;
-			m_linkstate = 0x10;
-			osd_printf_verbose("VUNIT_COMM: we are MASTER.\n");
+			set_linkstate(0x100);
+			osd_printf_verbose("VUNIT_COMM: we are cab-1 MASTER.\n");
 		}
 		else if ((ctrl & 0xf0) == 0x30)
 		{
 			m_linkid = 2;
-			m_linkstate = 0x20;
-			osd_printf_verbose("VUNIT_COMM: we are SLAVE.\n");
+			set_linkstate(0x200);
+			osd_printf_verbose("VUNIT_COMM: we are cab-2 SLAVE.\n");
 		}
 	}
 
@@ -343,7 +379,7 @@ void midway_vunit_comm_device::data_w_crusnusa(uint32_t data)
 	{
 		osd_printf_verbose("VUNIT_COMM: raise VSYNC.\n");
 		send_vsync(1);
-		m_linkstate = 0x10;
+		m_linkstate = 0x100;
 	}
 
 	if (intr & 0x80)
@@ -354,33 +390,30 @@ void midway_vunit_comm_device::data_w_crusnusa(uint32_t data)
 	uint8_t offset = 0;
 	switch (m_linkstate)
 	{
-		case 0x10:
+		case 0x100:
 			if (ctrl == 0xc4)
 			{
-				osd_printf_verbose("VUNIT_COMM: 10 to 11.\n");
-				m_linkstate = 0x11;
+				set_linkstate(0x101);
 			}
 			break;
 
-		case 0x11:
+		case 0x101:
 			if (ctrl == 0xc0)
 			{
-				osd_printf_verbose("VUNIT_COMM: 11 to 12.\n");
-				m_linkstate = 0x12;
+				set_linkstate(0x102);
 			}
 			break;
 
-		case 0x12:
+		case 0x102:
 			if (ctrl == 0xc4)
 			{
-				osd_printf_verbose("VUNIT_COMM: 12 to 13.\n");
-				m_linkstate = 0x13;
+				set_linkstate(0x103);
 				m_link_offset[0] = 0x02;
 				m_link_length[0] = 0x02;
 			}
 			break;
 
-		case 0x13:
+		case 0x103:
 			// send
 			offset = m_link_offset[0];
 			osd_printf_verbose("VUNIT_COMM: send %02x @ %u\n", payload, offset);
@@ -389,27 +422,23 @@ void midway_vunit_comm_device::data_w_crusnusa(uint32_t data)
 			m_link_offset[0] = m_link_length[0] = offset;
 			break;
 
-		case 0x14:
+		case 0x104:
 			if (ctrl == 0xc4)
 			{
-				osd_printf_verbose("VUNIT_COMM: 14 to 15.\n");
-				m_linkstate = 0x15;
+				set_linkstate(0x105);
 				m_link_offset[1] = 0x02;
 			}
 			break;
 
-		case 0x17:
-			osd_printf_verbose("VUNIT_COMM: 17 to 10 (W).\n");
-			m_linkstate = 0x10;
+		case 0x107:
+			set_linkstate(0x100);
 			break;
 
-		case 0x20:
+		case 0x200:
 			if (ctrl == 0x31)
 			{
 				// comms idle -> ready to receive
-				osd_printf_verbose("VUNIT_COMM: 20 to 21.\n");
-				m_linkstate = 0x21;
-
+				set_linkstate(0x201);
 				if (m_intcount == 1)
 				{
 					m_maincpu->set_input_line(2, ASSERT_LINE);
@@ -422,56 +451,50 @@ void midway_vunit_comm_device::data_w_crusnusa(uint32_t data)
 			}
 			break;
 
-		case 0x21:
+		case 0x201:
 			if (ctrl == 0x30)
 			{
 				// ready to receive -> prep receive
-				osd_printf_verbose("VUNIT_COMM: 21 to 22.\n");
-				m_linkstate = 0x22;
-
+				set_linkstate(0x202);
 				m_maincpu->set_input_line(2, CLEAR_LINE);
 			}
 			break;
 
-		case 0x22:
+		case 0x202:
 			if (ctrl == 0x32)
 			{
 				// prep receive -> start receive
-				osd_printf_verbose("VUNIT_COMM: 22 to 23.\n");
+				set_linkstate(0x203);
 				m_readcount = 0;
-				m_linkstate = 0x23;
 			}
 			break;
 
-		case 0x24:
+		case 0x204:
 			if (ctrl == 0x30)
 			{
-				osd_printf_verbose("VUNIT_COMM: 24 to 20.\n");
-				m_linkstate = 0x20;
+				set_linkstate(0x200);
 			}
 			break;
 
-		case 0x25:
+		case 0x205:
 			if (ctrl == 0x30)
 			{
 				// end receive
-				osd_printf_verbose("VUNIT_COMM: 25 to 26.\n");
-				m_linkstate = 0x26;
+				set_linkstate(0x206);
 			}
 			break;
 
-		case 0x26:
+		case 0x206:
 			if (ctrl == 0x32)
 			{
 				// prepare to send
-				osd_printf_verbose("VUNIT_COMM: 26 to 27.\n");
+				set_linkstate(0x207);
 				m_link_offset[1] = 0x02;
 				m_link_length[1] = 0x02;
-				m_linkstate = 0x27;
 			}
 			break;
 
-		case 0x27:
+		case 0x207:
 			// send
 			offset = m_link_offset[1];
 			osd_printf_verbose("VUNIT_COMM: send %02x @ %u\n", payload, offset);
@@ -480,11 +503,10 @@ void midway_vunit_comm_device::data_w_crusnusa(uint32_t data)
 			m_link_offset[1] = m_link_length[1] = offset;
 			break;
 
-		case 0x28:
+		case 0x208:
 			if (ctrl == 0x30)
 			{
-				osd_printf_verbose("VUNIT_COMM: 28 to 20.\n");
-				m_linkstate = 0x20;
+				set_linkstate(0x200);
 			}
 			break;
 
@@ -512,8 +534,7 @@ void midway_vunit_comm_device::flags_w_crusnusa(uint32_t data)
 
 	if (newflags == 0x20 && m_linkstate == 0x26)
 	{
-		osd_printf_verbose("VUNIT_COMM: 26 to 20*.\n");
-		m_linkstate = 0x20;
+		set_linkstate(0x200);
 	}
 }
 
@@ -521,61 +542,102 @@ uint32_t midway_vunit_comm_device::data_r_crusnwld()
 {
 	comm_tick();
 
-	//uint8_t offset = 0;
-	//uint32_t result = 0;
+	uint8_t offset = 0;
+	uint32_t result = 0;
 	switch (m_linkstate)
 	{
-		case 0x10:
-			return 0x0eff0000;
+		case 0x100:
+			// start of communication
+			return 0x02ff0000; // 0eff0000
 
-		case 0x11:
+		case 0x101:
+			// before handshake
 			return 0x00ff0000;
 
-		case 0x12:
-			if (m_readcount % 2)
-				return 0x0eff0000;
-			else
-				return 0x00ff0000;
+		case 0x102:
+			// during handshake
+			// status is ANDed with a pattern @ 00773c+
+			switch (m_readcount)
+			{
+				case 0:
+					return 0x00ff0000; // & 0c000000
 
-		case 0x15:
-			return 0x0eff0000;
+				case 1:
+					return 0x00ff0000; // & 09000000
 
-		case 0x16:
+				case 2:
+					return 0x02ff0000; // & 03000000
+
+				case 3:
+					return 0x02ff0000; // & 06000000
+
+				case 4:
+					return 0x00ff0000; // & 01000000
+
+				case 5:
+					return 0x02ff0000; // & 02000000
+
+				case 6:
+					return 0x00ff0000; // & 04000000
+
+				case 7:
+					return 0x00ff0000; // & 08000000
+
+				default:
+					if (m_readcount % 2)
+						return 0x02ff0000;
+					else
+						return 0x00ff0000;
+			}
+
+		case 0x103:
+			return 0x00ff0000;
+
+		case 0x105:
 			return 0x02ff0000;
 
-		case 0x20:
+		case 0x106:
 			return 0x00ff0000;
 
-		case 0x21:
-			// 7807
-			return 0x01ff0000;
+		case 0x107:
+			// after send
+			set_linkstate(0x108);
+			return 0x02ff0000;
 
-		case 0x22:
-			// 781a
-			m_linkstate = 0x23;
-			return 0x00ff0000;
+		case 0x109:
+			return 0x005a0000;
 
-		case 0x23:
-			if (m_readcount % 2)
-				return 0x01ff0000;
-			else
-				return 0x00ff0000;
+		case 0x10a:
+			m_readcount++;
+			if (m_readcount == 2)
+			{
+				set_linkstate(0x10b);
+				m_readcount = 0;
+				m_link_offset[1] = 0x02;
+			}
+			return 0x02000000;
 
-		case 0x24:
-			m_linkstate = 0x25;
-			return 0x00a50000;
+		case 0x10b:
+			// recv
+			offset = m_link_offset[1];
+			osd_printf_verbose("VUNIT_COMM: read %02x.@ %u\n", m_link_buffer[1][offset], offset);
+			result = m_link_buffer[1][offset] << 16;
+			if ((offset % 2))
+				result |= 0x02000000;
+			m_readcount++;
+			if (m_readcount == 2)
+			{
+				m_readcount = 0;
+				m_link_offset[1] += 1;
+			}
+			if (m_link_offset[1] >= m_link_length[1])
+			{
+				set_linkstate(0x10c);
+			}
+			return result;
 
-		case 0x25:
-			m_linkstate = 0x26;
-			return 0x00a50000;
-
-		case 0x26:
-			m_linkstate = 0x27;
-			return 0x00ff0000;
-
-		case 0x27:
-			m_linkstate = 0x20;
-			return 0x01ff0000;
+		case 0x10d:
+			return 0x02ff0000;
 
 		default:
 			return 0;
@@ -597,123 +659,173 @@ void midway_vunit_comm_device::data_w_crusnwld(uint32_t data)
 		{
 			case 0x10:
 				m_linkid = 1;
-				m_linkstate = 0x10;
-				osd_printf_verbose("VUNIT_COMM: we are MASTER.\n");
+				set_linkstate(0x100);
+				osd_printf_verbose("VUNIT_COMM: we are cab 1 - MASTER.\n");
 				break;
 
 			case 0x20:
 				m_linkid = 2;
-				m_linkstate = 0x20;
-				osd_printf_verbose("VUNIT_COMM: we are SLAVE.\n");
+				set_linkstate(0x200);
+				osd_printf_verbose("VUNIT_COMM: we are cab 2 - SLAVE.\n");
 				break;
 
 			case 0x40:
 				m_linkid = 3;
-				m_linkstate = 0x30;
-				osd_printf_verbose("VUNIT_COMM: we are SLAVE.\n");
+				set_linkstate(0x300);
+				osd_printf_verbose("VUNIT_COMM: we are cab 3 - SLAVE.\n");
 				break;
 
 			case 0x80:
 				m_linkid = 4;
-				m_linkstate = 0x40;
-				osd_printf_verbose("VUNIT_COMM: we are SLAVE.\n");
+				set_linkstate(0x400);
+				osd_printf_verbose("VUNIT_COMM: we are cab 4 - SLAVE.\n");
 				break;
 		}
 	}
 
-	//uint8_t offset = 0;
+	uint8_t offset = 0;
 	switch (m_linkstate)
 	{
-		case 0x10:
+		case 0x100:
+			// start of communication
 			if (ctrl == 0x11)
 			{
-				osd_printf_verbose("VUNIT_COMM: 10 to 11.\n");
-				m_linkstate = 0x11;
+				set_linkstate(0x101);
 			}
 			break;
 
-		case 0x11:
+		case 0x101:
+			// start handshake
 			if (ctrl == 0x10)
 			{
-				osd_printf_verbose("VUNIT_COMM: 11 to 12.\n");
-				m_linkstate = 0x12;
-				m_readcount = 0x01;
+				set_linkstate(0x102);
+				m_readcount = 0x00;
+				osd_printf_verbose("VUNIT_COMM: sync step-%u\n", m_readcount);
 			}
 			break;
 
-		case 0x12:
-			if ((m_readcount % 2) && (ctrl == 0x11))
+		case 0x102:
+			// handshake
+			if ((m_readcount % 2) && (ctrl == 0x10))
 			{
 				m_readcount++;
-				osd_printf_verbose("VUNIT_COMM: 1 m_readcount++ : %u\n", m_readcount);
+				osd_printf_verbose("VUNIT_COMM: sync step-%u\n", m_readcount);
 			}
-			else if (!(m_readcount % 2) && (ctrl == 0x10))
+			else if (!(m_readcount % 2) && (ctrl == 0x11))
 			{
 				m_readcount++;
-				osd_printf_verbose("VUNIT_COMM: 2 m_readcount++ : %u\n", m_readcount);
+				osd_printf_verbose("VUNIT_COMM: sync step-%u\n", m_readcount);
 			}
 
 			if (m_readcount >= 8)
 			{
+				set_linkstate(0x103);
 				m_readcount = 0;
-				osd_printf_verbose("VUNIT_COMM: 12 to 13.\n");
-				m_linkstate = 0x13;
+				data_w_crusnwld(data);
 			}
 			break;
 
-		case 0x13:
+		case 0x103:
 			if (ctrl == 0x10)
 			{
-				osd_printf_verbose("VUNIT_COMM: send : %02x.\n", payload);
-				m_linkstate = 0x14;
+				if (payload == 0xa5)
+				{
+					// handshake error
+					set_linkstate(0x100);
+				} else {
+					set_linkstate(0x104);
+				}
 			}
 			break;
 
-		case 0x14:
-			if (ctrl == 0x10)
-			{
-				osd_printf_verbose("VUNIT_COMM: 14 to 15.\n");
-				m_linkstate = 0x15;
-			}
-			break;
-
-		case 0x15:
+		case 0x104:
 			if (ctrl == 0x11)
 			{
-				osd_printf_verbose("VUNIT_COMM: 15 to 16.\n");
-				m_linkstate = 0x16;
+				set_linkstate(0x105);
 			}
 			break;
 
-		case 0x20:
+		case 0x105:
+			if (ctrl == 0x10)
+			{
+				set_linkstate(0x106);
+			}
+			break;
+
+		case 0x106:
+			if (ctrl == 0x11)
+			{
+				set_linkstate(0x107);
+				m_link_offset[0] = 0x02;
+				m_link_length[0] = 0x02;
+			}
+			break;
+
+		case 0x107:
+			// send mode
+			offset = m_link_offset[0];
+			osd_printf_verbose("VUNIT_COMM: send %02x @ %u\n", payload, offset);
+			m_link_buffer[0][offset] = payload;
+			offset++;
+			m_link_offset[0] = m_link_length[0] = offset;
+			break;
+
+		case 0x108:
+			// after send
+			if (ctrl == 0x11)
+			{
+				set_linkstate(0x109);
+			}
+			break;
+
+		case 0x109:
+			if (ctrl == 0x10)
+			{
+				set_linkstate(0x10a);
+			}
+			break;
+
+		case 0x10c:
+			// after recv
+			if (ctrl == 0x11)
+			{
+				set_linkstate(0x10d);
+			}
+			break;
+
+		case 0x10d:
+			if (ctrl == 0x10)
+			{
+				set_linkstate(0x100);
+			}
+			break;
+
+
+		case 0x200:
 			if (ctrl == 0x22)
 			{
 				// 77f9
-				osd_printf_verbose("VUNIT_COMM: 20 to 21.\n");
-				m_linkstate = 0x21;
+				set_linkstate(0x201);
 				m_readcount = 0x01;
 			}
 			break;
 
-		case 0x21:
+		case 0x201:
 			if (ctrl == 0x20)
 			{
-				// 7813
-				osd_printf_verbose("VUNIT_COMM: 21 to 22.\n");
-				m_linkstate = 0x22;
+				set_linkstate(0x202);
 				m_readcount = 0x00;
 			}
 			break;
 
-		case 0x23:
+		case 0x203:
 			m_readcount++;
 			osd_printf_verbose("VUNIT_COMM: 1 m_readcount++ : %u\n", m_readcount);
 
 			if (m_readcount >= 8)
 			{
 				m_readcount = 0;
-				osd_printf_verbose("VUNIT_COMM: 23 to 24.\n");
-				m_linkstate = 0x24;
+				set_linkstate(0x204);
 			}
 			break;
 
@@ -732,11 +844,20 @@ void midway_vunit_comm_device::flags_w_crusnwld(uint32_t data)
 			case 0x20:
 				osd_printf_verbose("VUNIT_COMM: we are READING.\n");
 				break;
-			
+
 			case 0x60:
 				osd_printf_verbose("VUNIT_COMM: we are WRITING.\n");
 				break;
 		}
+	}
+}
+
+void midway_vunit_comm_device::set_linkstate(uint16_t newstate)
+{
+	if (m_linkstate != newstate)
+	{
+		osd_printf_verbose("VUNIT_COMM: linkstate %x to %x.\n", m_linkstate, newstate);
+		m_linkstate = newstate;
 	}
 }
 

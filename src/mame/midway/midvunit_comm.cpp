@@ -23,6 +23,7 @@ midway_vunit_comm_device::midway_vunit_comm_device(const machine_config &mconfig
 	m_sock_tx(m_ioctx),
 	m_tx_timeout(m_ioctx)
 {
+	m_framesync = mconfig.options().comm_framesync() ? 0x01 : 0x00;
 }
 
 void midway_vunit_comm_device::device_start()
@@ -635,7 +636,10 @@ uint32_t midway_vunit_comm_device::data_r_crusnwld()
 				m_link_offset[1] = 0x02;
 				wait_recv_ready(1);
 			}
-			return 0x02000000;
+			result = m_link_buffer[1][1] << 16;
+			result |= 0x02000000;
+
+			return result;
 
 		case 0x10b:
 			// recv cab 2
@@ -714,7 +718,10 @@ uint32_t midway_vunit_comm_device::data_r_crusnwld()
 				set_linkstate(0x209);
 				wait_recv_ready(0);
 			}
-			return 0x01000000;
+			result = m_link_buffer[0][1] << 16;
+			result |= 0x01000000;
+
+			return result;
 
 		case 0x209:
 			// recv cab 1
@@ -863,6 +870,7 @@ void midway_vunit_comm_device::data_w_crusnwld(uint32_t data)
 			if (ctrl == 0x11)
 			{
 				set_linkstate(0x107);
+				m_link_buffer[0][1] = payload;
 				m_link_offset[0] = 0x02;
 				m_link_length[0] = 0x02;
 			}
@@ -961,9 +969,8 @@ void midway_vunit_comm_device::data_w_crusnwld(uint32_t data)
 			if (ctrl == 0x20 && payload == 0x5a)
 			{
 				// short send?
-				set_linkstate(0x20d);
-				m_link_offset[1] = 0x02;
-				m_link_length[1] = 0x02;
+				osd_printf_verbose("VUNIT_COMM: short send?\n");
+				set_linkstate(0x20c);
 			}
 			break;
 
@@ -977,6 +984,7 @@ void midway_vunit_comm_device::data_w_crusnwld(uint32_t data)
 		case 0x20c:
 			if (ctrl == 0x22)
 			{
+				m_link_buffer[1][1] = payload;
 				set_linkstate(0x20d);
 				m_link_offset[1] = 0x02;
 				m_link_length[1] = 0x02;
@@ -1032,7 +1040,9 @@ void midway_vunit_comm_device::set_linkstate(uint16_t newstate)
 
 void midway_vunit_comm_device::wait_recv_ready(uint8_t idx)
 {
-	return;
+	if (!m_framesync)
+		return;
+
 	while(m_link_ready[idx] == 0)
 	{
 		if (m_rx_state == 2 && m_tx_state == 2)
@@ -1045,7 +1055,7 @@ void midway_vunit_comm_device::wait_recv_ready(uint8_t idx)
 
 void midway_vunit_comm_device::send_vsync(uint8_t state)
 {
-	unsigned data_size = 0x0200;
+	unsigned data_size = 0x0300;
 	m_buffer0[0] = 0xff;
 	m_buffer0[1] = state;
 	send_frame(data_size);
@@ -1196,7 +1206,7 @@ void midway_vunit_comm_device::comm_tick()
 
 	if (m_rx_state == 2 && m_tx_state == 2)
 	{
-		unsigned data_size = 0x0200;
+		unsigned data_size = 0x0300;
 		unsigned recv = read_frame(data_size);
 		while (recv > 0)
 		{
@@ -1213,7 +1223,7 @@ void midway_vunit_comm_device::comm_tick()
 					{
 						m_link_buffer[buffer][j] = m_buffer0[j];
 					}
-					m_link_length[buffer] = m_buffer0[0x1fe] << 8 | m_buffer0[0x1ff]; //((m_buffer0[2] * 2) + 5;
+					m_link_length[buffer] = m_buffer0[0x2fe] << 8 | m_buffer0[0x2ff]; //((m_buffer0[2] * 2) + 5;
 					osd_printf_verbose("VUNIT_COMM: recv m_link_length[%d] = %u.\n", buffer, m_link_length[buffer]);
 					m_link_ready[buffer] = 1;
 
@@ -1245,8 +1255,8 @@ void midway_vunit_comm_device::comm_tick()
 				{
 					m_buffer0[j] = m_link_buffer[buffer][j];
 				}
-				m_buffer0[0x1fe] = m_link_length[buffer] >> 8;
-				m_buffer0[0x1ff] = m_link_length[buffer] & 0xff;
+				m_buffer0[0x2fe] = m_link_length[buffer] >> 8;
+				m_buffer0[0x2ff] = m_link_length[buffer] & 0xff;
 
 				osd_printf_verbose("VUNIT_COMM: send m_link_length[%d] = %u.\n", buffer, m_link_length[buffer]);
 				m_link_length[buffer] = 0;

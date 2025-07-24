@@ -47,13 +47,14 @@ private:
 	uint8_t m_rx_state;
 	uint8_t m_tx_state;
 
-	uint8_t m_buffer0[0x200]{};
+	uint8_t m_buffer0[0x300]{};
+	uint8_t m_framesync;
 
 	uint8_t m_linktype = 0;
 	uint8_t m_linkid = 0;
 	uint16_t m_linkstate = 0;
 
-	uint8_t m_link_buffer[0x04][0x0200]{};
+	uint8_t m_link_buffer[0x04][0x0300]{};
 	uint16_t m_link_length[0x04]{};
 	uint16_t m_link_offset[0x04]{};
 	uint8_t m_link_ready[0x04]{};

@@ -540,7 +540,22 @@ void midway_vunit_comm_device::flags_w_crusnusa(uint32_t data)
 
 uint32_t midway_vunit_comm_device::data_r_crusnwld()
 {
-	comm_tick();
+	switch (m_linkstate)
+	{
+		case 0x10b:
+		case 0x209:
+			// do NOT recv data while reading from buffer.
+			break;
+
+		case 0x107:
+		case 0x20d:
+			// do NOT send data while writing to buffer.
+			break;
+
+		default:
+			comm_tick();
+			break;
+	}
 
 	uint8_t offset = 0;
 	uint32_t result = 0;
@@ -618,7 +633,7 @@ uint32_t midway_vunit_comm_device::data_r_crusnwld()
 			return 0x02000000;
 
 		case 0x10b:
-			// recv
+			// recv cab 2
 			offset = m_link_offset[1];
 			osd_printf_verbose("VUNIT_COMM: read %02x.@ %u\n", m_link_buffer[1][offset], offset);
 			result = m_link_buffer[1][offset] << 16;
@@ -638,6 +653,92 @@ uint32_t midway_vunit_comm_device::data_r_crusnwld()
 
 		case 0x10d:
 			return 0x02ff0000;
+
+	// -----------------------------------
+
+		case 0x200:
+			return 0x00ff0000;
+
+		case 0x201:
+			return 0x01ff0000;
+
+		case 0x202:
+			// sync
+			if (m_readcount % 2)
+			{
+				return 0x01ff0000;
+			}
+			else
+			{
+				return 0x00ff0000;
+			}
+
+		case 0x203:
+			m_readcount++;
+			if (m_readcount == 2)
+			{
+				m_readcount = 0;
+				set_linkstate(0x204);
+			}
+			return 0x00c60000;
+
+		case 0x204:
+			m_readcount++;
+			if (m_readcount == 2)
+			{
+				m_readcount = 0;
+				set_linkstate(0x205);
+			}
+			return 0x01970000;
+
+		case 0x206:
+			m_readcount++;
+			if (m_readcount == 2)
+			{
+				m_readcount = 0;
+				set_linkstate(0x207);
+			}
+			return 0x005A0000;
+
+		case 0x208:
+			m_readcount++;
+			if (m_readcount == 2)
+			{
+				m_readcount = 0;
+				m_link_offset[0] = 0x02;
+				set_linkstate(0x209);
+			}
+			return 0x01000000;
+
+		case 0x209:
+			// recv cab 1
+			offset = m_link_offset[0];
+			osd_printf_verbose("VUNIT_COMM: read %02x.@ %u\n", m_link_buffer[0][offset], offset);
+			result = m_link_buffer[0][offset] << 16;
+			if ((offset % 2))
+				result |= 0x01000000;
+			m_readcount++;
+			if (m_readcount == 2)
+			{
+				m_readcount = 0;
+				m_link_offset[0] += 1;
+			}
+			if (m_link_offset[0] >= m_link_length[0])
+			{
+				set_linkstate(0x20a);
+			}
+			return result;
+
+		case 0x20b:
+			return 0x01000000;
+
+		case 0x20c:
+			return 0x00000000;
+			
+		case 0x20d:
+			// after send
+			set_linkstate(0x20e);
+			return 0x01ff0000;
 
 		default:
 			return 0;
@@ -791,6 +892,10 @@ void midway_vunit_comm_device::data_w_crusnwld(uint32_t data)
 			{
 				set_linkstate(0x10d);
 			}
+			if (ctrl == 0x10 && payload == 0xa5)
+			{
+				set_linkstate(0x100);
+			}
 			break;
 
 		case 0x10d:
@@ -804,7 +909,6 @@ void midway_vunit_comm_device::data_w_crusnwld(uint32_t data)
 		case 0x200:
 			if (ctrl == 0x22)
 			{
-				// 77f9
 				set_linkstate(0x201);
 				m_readcount = 0x01;
 			}
@@ -818,16 +922,68 @@ void midway_vunit_comm_device::data_w_crusnwld(uint32_t data)
 			}
 			break;
 
-		case 0x203:
+		case 0x202:
 			m_readcount++;
-			osd_printf_verbose("VUNIT_COMM: 1 m_readcount++ : %u\n", m_readcount);
+			osd_printf_verbose("VUNIT_COMM: sync++ : %u\n", m_readcount);
 
 			if (m_readcount >= 8)
 			{
+				set_linkstate(0x203);
 				m_readcount = 0;
-				set_linkstate(0x204);
 			}
 			break;
+
+		case 0x205:
+			if (ctrl == 0x22)
+			{
+				set_linkstate(0x206);
+			}
+			break;
+
+		case 0x207:
+			if (ctrl == 0x20)
+			{
+				set_linkstate(0x208);
+			}
+			break;
+
+		case 0x20a:
+			if (ctrl == 0x22)
+			{
+				set_linkstate(0x20b);
+			}
+			break;
+
+		case 0x20b:
+			if (ctrl == 0x20)
+			{
+				set_linkstate(0x20c);
+			}
+			break;
+
+		case 0x20c:
+			if (ctrl == 0x22)
+			{
+				set_linkstate(0x20d);
+				m_link_offset[1] = 0x02;
+				m_link_length[1] = 0x02;
+			}
+			break;
+
+		case 0x20d:
+			// send mode
+			offset = m_link_offset[1];
+			osd_printf_verbose("VUNIT_COMM: send %02x @ %u\n", payload, offset);
+			m_link_buffer[1][offset] = payload;
+			offset++;
+			m_link_offset[1] = m_link_length[1] = offset;
+			break;
+
+		case 0x20e:
+			if (ctrl == 0x22)
+			{
+				set_linkstate(0x200);
+			}
 
 		default:
 			break;

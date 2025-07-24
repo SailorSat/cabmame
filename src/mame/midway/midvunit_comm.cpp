@@ -64,6 +64,7 @@ void midway_vunit_comm_device::set_linktype(uint8_t linktype)
 		{
 			m_link_offset[i] = 2;
 			m_link_length[i] = 19;
+			m_link_ready[i] = 0;
 
 			m_link_buffer[i][0] = i + 1; // link id
 			m_link_buffer[i][1] = 19;    // message size
@@ -93,6 +94,7 @@ void midway_vunit_comm_device::set_linktype(uint8_t linktype)
 			{
 				m_link_offset[i] = 2;
 				m_link_length[i] = 19;
+				m_link_ready[i] = 0;
 
 				m_link_buffer[i][0] = i + 1; // link id
 				m_link_buffer[i][1] = 19;    // message size
@@ -240,7 +242,7 @@ uint32_t midway_vunit_comm_device::data_r_crusnusa()
 			break;
 	}
 
-	uint8_t offset = 0;
+	uint16_t offset = 0;
 	uint32_t result = 0;
 	switch (m_linkstate)
 	{
@@ -269,6 +271,7 @@ uint32_t midway_vunit_comm_device::data_r_crusnusa()
 				set_linkstate(0x106);
 				m_readcount = 0;
 				m_link_offset[1] = 2;
+				wait_recv_ready(1);
 			}
 			return 0x02000000;
 
@@ -315,6 +318,7 @@ uint32_t midway_vunit_comm_device::data_r_crusnusa()
 				m_readcount = 0;
 				m_link_offset[0] = 2;
 				set_linkstate(0x204);
+				wait_recv_ready(0);
 			}
 			return 0x04000000;
 
@@ -387,7 +391,7 @@ void midway_vunit_comm_device::data_w_crusnusa(uint32_t data)
 		m_maincpu->set_input_line(2, intr & 0x08 ? ASSERT_LINE : CLEAR_LINE);
 	}
 
-	uint8_t offset = 0;
+	uint16_t offset = 0;
 	switch (m_linkstate)
 	{
 		case 0x100:
@@ -557,7 +561,7 @@ uint32_t midway_vunit_comm_device::data_r_crusnwld()
 			break;
 	}
 
-	uint8_t offset = 0;
+	uint16_t offset = 0;
 	uint32_t result = 0;
 	switch (m_linkstate)
 	{
@@ -629,6 +633,7 @@ uint32_t midway_vunit_comm_device::data_r_crusnwld()
 				set_linkstate(0x10b);
 				m_readcount = 0;
 				m_link_offset[1] = 0x02;
+				wait_recv_ready(1);
 			}
 			return 0x02000000;
 
@@ -707,6 +712,7 @@ uint32_t midway_vunit_comm_device::data_r_crusnwld()
 				m_readcount = 0;
 				m_link_offset[0] = 0x02;
 				set_linkstate(0x209);
+				wait_recv_ready(0);
 			}
 			return 0x01000000;
 
@@ -784,7 +790,7 @@ void midway_vunit_comm_device::data_w_crusnwld(uint32_t data)
 		}
 	}
 
-	uint8_t offset = 0;
+	uint16_t offset = 0;
 	switch (m_linkstate)
 	{
 		case 0x100:
@@ -952,6 +958,13 @@ void midway_vunit_comm_device::data_w_crusnwld(uint32_t data)
 			{
 				set_linkstate(0x20b);
 			}
+			if (ctrl == 0x20 && payload == 0x5a)
+			{
+				// short send?
+				set_linkstate(0x20d);
+				m_link_offset[1] = 0x02;
+				m_link_length[1] = 0x02;
+			}
 			break;
 
 		case 0x20b:
@@ -1017,9 +1030,22 @@ void midway_vunit_comm_device::set_linkstate(uint16_t newstate)
 	}
 }
 
+void midway_vunit_comm_device::wait_recv_ready(uint8_t idx)
+{
+	return;
+	while(m_link_ready[idx] == 0)
+	{
+		if (m_rx_state == 2 && m_tx_state == 2)
+			comm_tick();
+		else
+			return;
+	}
+	m_link_ready[idx] = 0;
+}
+
 void midway_vunit_comm_device::send_vsync(uint8_t state)
 {
-	unsigned data_size = 0x0100;
+	unsigned data_size = 0x0200;
 	m_buffer0[0] = 0xff;
 	m_buffer0[1] = state;
 	send_frame(data_size);
@@ -1170,7 +1196,7 @@ void midway_vunit_comm_device::comm_tick()
 
 	if (m_rx_state == 2 && m_tx_state == 2)
 	{
-		unsigned data_size = 0x0080;
+		unsigned data_size = 0x0200;
 		unsigned recv = read_frame(data_size);
 		while (recv > 0)
 		{
@@ -1187,8 +1213,9 @@ void midway_vunit_comm_device::comm_tick()
 					{
 						m_link_buffer[buffer][j] = m_buffer0[j];
 					}
-					m_link_length[buffer] = m_buffer0[1];
+					m_link_length[buffer] = m_buffer0[0x1fe] << 8 | m_buffer0[0x1ff]; //((m_buffer0[2] * 2) + 5;
 					osd_printf_verbose("VUNIT_COMM: recv m_link_length[%d] = %u.\n", buffer, m_link_length[buffer]);
+					m_link_ready[buffer] = 1;
 
 					// forward message to other nodes
 					send_frame(data_size);
@@ -1214,11 +1241,12 @@ void midway_vunit_comm_device::comm_tick()
 			if (m_link_length[buffer] > 0x00)
 			{
 				m_link_buffer[buffer][0] = m_linkid;
-				m_link_buffer[buffer][1] = m_link_length[buffer];
 				for (unsigned j = 0x00 ; j < data_size ; j++)
 				{
 					m_buffer0[j] = m_link_buffer[buffer][j];
 				}
+				m_buffer0[0x1fe] = m_link_length[buffer] >> 8;
+				m_buffer0[0x1ff] = m_link_length[buffer] & 0xff;
 
 				osd_printf_verbose("VUNIT_COMM: send m_link_length[%d] = %u.\n", buffer, m_link_length[buffer]);
 				m_link_length[buffer] = 0;

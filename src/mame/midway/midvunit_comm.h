@@ -54,8 +54,9 @@ private:
 	uint16_t m_linkstate = 0;
 
 	uint8_t m_link_buffer[0x04][0x0200]{};
-	uint8_t m_link_length[0x04]{};
-	uint8_t m_link_offset[0x04]{};
+	uint16_t m_link_length[0x04]{};
+	uint16_t m_link_offset[0x04]{};
+	uint8_t m_link_ready[0x04]{};
 
 	uint16_t m_data = 0;
 	uint8_t m_flags = 0;
@@ -72,6 +73,7 @@ private:
 	void flags_w_crusnwld(uint32_t data);
 
 	void set_linkstate(uint16_t newstate);
+	void wait_recv_ready(uint8_t idx);
 	void send_vsync(uint8_t state);
 
 	void check_sockets();

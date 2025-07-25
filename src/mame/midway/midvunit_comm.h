@@ -34,7 +34,7 @@ protected:
 	virtual void device_reset() override ATTR_COLD;
 
 	required_device<tms32031_device> m_maincpu;
-
+	required_ioport m_dsw;
 
 private:
 	asio::io_context m_ioctx;

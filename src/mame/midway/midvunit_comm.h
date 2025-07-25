@@ -69,6 +69,9 @@ private:
 	void data_w_crusnusa(uint32_t data);
 	void flags_w_crusnusa(uint32_t data);
 
+	uint8_t get_linkcount();
+	uint32_t get_linkmask_crusnwld();
+
 	uint32_t data_r_crusnwld();
 	void data_w_crusnwld(uint32_t data);
 	void flags_w_crusnwld(uint32_t data);

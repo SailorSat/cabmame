@@ -3,9 +3,6 @@
 
 /*
 NOTE: this is a fake device that mimics other vunit systems
-
-uint8_t linkcount = ((m_dsw->read() >> 3) & 0x0003) + 1;
-
 */
 
 #include "emu.h"
@@ -65,39 +62,39 @@ void midway_vunit_comm_device::set_linktype(uint8_t linktype)
 		case 1:
 			// Cruis'n USA
 			osd_printf_verbose("VUNIT_COMM: set mode 'Cruis'n USA'\n");
-		for (int i = 0; i < 2; i++)
-		{
-			m_link_offset[i] = 1;
-			m_link_length[i] = 19;
-			m_link_ready[i] = 0;
+			for (int i = 0; i < 2; i++)
+			{
+				m_link_offset[i] = 0;
+				m_link_length[i] = 19;
+				m_link_ready[i] = 0;
 
-			m_link_buffer[i][0] = i + 1; // link id
-			m_link_buffer[i][1] = 0x00;  // head.len-h
-			m_link_buffer[i][2] = 0x06;  // head.len-l
-			m_link_buffer[i][3] = 0xff;  // head.chk-h
-			m_link_buffer[i][4] = 0xf9;  // head.chk-l
-			m_link_buffer[i][5] = 0x01;  // data 1a...
-			m_link_buffer[i][6] = 0x22;  // data 1b...
-			m_link_buffer[i][7] = 0x00;  // data 2a...
-			m_link_buffer[i][8] = 0x00;  // data 2b...
-			m_link_buffer[i][9] = 0x00;  // data 3a...
-			m_link_buffer[i][10] = 0x00; // data 3b...
-			m_link_buffer[i][11] = 0x00; // data 4a...
-			m_link_buffer[i][12] = 0x00; // data 4b...
-			m_link_buffer[i][13] = 0x00; // data 5a...
-			m_link_buffer[i][14] = 0xff; // data 5b...
-			m_link_buffer[i][15] = 0x64; // data 6a...
-			m_link_buffer[i][16] = 0x00; // data 6b...
-			m_link_buffer[i][17] = 0x01; // tail
-			m_link_buffer[i][18] = 0x86; // tail
-		}
+				m_link_buffer[i][0] = i + 1; // link id
+				m_link_buffer[i][1] = 0x00;  // head.len-h
+				m_link_buffer[i][2] = 0x06;  // head.len-l
+				m_link_buffer[i][3] = 0xff;  // head.chk-h
+				m_link_buffer[i][4] = 0xf9;  // head.chk-l
+				m_link_buffer[i][5] = 0x01;  // data 1a...
+				m_link_buffer[i][6] = 0x22;  // data 1b...
+				m_link_buffer[i][7] = 0x00;  // data 2a...
+				m_link_buffer[i][8] = 0x00;  // data 2b...
+				m_link_buffer[i][9] = 0x00;  // data 3a...
+				m_link_buffer[i][10] = 0x00; // data 3b...
+				m_link_buffer[i][11] = 0x00; // data 4a...
+				m_link_buffer[i][12] = 0x00; // data 4b...
+				m_link_buffer[i][13] = 0x00; // data 5a...
+				m_link_buffer[i][14] = 0xff; // data 5b...
+				m_link_buffer[i][15] = 0x64; // data 6a...
+				m_link_buffer[i][16] = 0x00; // data 6b...
+				m_link_buffer[i][17] = 0x01; // tail
+				m_link_buffer[i][18] = 0x86; // tail
+			}
 			break;
 		case 2:
 			// Cruis'n World
 			osd_printf_verbose("VUNIT_COMM: set mode 'Cruis'n World'\n");
 			for (int i = 0; i < 4; i++)
 			{
-				m_link_offset[i] = 1;
+				m_link_offset[i] = 0;
 				m_link_length[i] = 19;
 				m_link_ready[i] = 0;
 
@@ -125,6 +122,54 @@ void midway_vunit_comm_device::set_linktype(uint8_t linktype)
 		case 3:
 			// Off Road Challenge
 			osd_printf_verbose("VUNIT_COMM: set mode 'Off Road Challenge'\n");
+			for (int i = 0; i < 4; i++)
+			{
+				m_link_offset[i] = 0;
+				m_link_length[i] = 41;
+				m_link_ready[i] = 0;
+
+				m_link_buffer[i][0] = i + 1; // link id
+				m_link_buffer[i][1] = 0x00;
+				m_link_buffer[i][2] = 0x00;
+				m_link_buffer[i][3] = 0x00;
+				m_link_buffer[i][4] = 0x08;
+				m_link_buffer[i][5] = 0x00;
+				m_link_buffer[i][6] = 0x00;
+				m_link_buffer[i][7] = 0x00;
+				m_link_buffer[i][8] = 0x00;
+				m_link_buffer[i][9] = 0x00;
+				m_link_buffer[i][10] = 0x00;
+				m_link_buffer[i][11] = 0x00;
+				m_link_buffer[i][12] = 0x00;
+				m_link_buffer[i][13] = 0x00;
+				m_link_buffer[i][14] = 0x00;
+				m_link_buffer[i][15] = 0x00;
+				m_link_buffer[i][16] = 0x00;
+				m_link_buffer[i][17] = 0x00;
+				m_link_buffer[i][18] = 0x00;
+				m_link_buffer[i][19] = 0x00;
+				m_link_buffer[i][20] = 0x00;
+				m_link_buffer[i][21] = 0x00;
+				m_link_buffer[i][22] = 0x00;
+				m_link_buffer[i][23] = 0x00;
+				m_link_buffer[i][24] = 0x00;
+				m_link_buffer[i][25] = 0x00;
+				m_link_buffer[i][26] = 0x00;
+				m_link_buffer[i][27] = 0x00;
+				m_link_buffer[i][28] = 0x00;
+				m_link_buffer[i][29] = 0x00;
+				m_link_buffer[i][30] = 0x00;
+				m_link_buffer[i][31] = 0x00;
+				m_link_buffer[i][32] = 0x00;
+				m_link_buffer[i][33] = 0x00;
+				m_link_buffer[i][34] = 0x00;
+				m_link_buffer[i][35] = 0x00;
+				m_link_buffer[i][36] = 0x00;
+				m_link_buffer[i][37] = 0x00;
+				m_link_buffer[i][38] = 0x00;
+				m_link_buffer[i][39] = 0x00;
+				m_link_buffer[i][40] = 0x08;
+			}
 			break;
 		default:
 			logerror("VUNIT_COMM-set_linktype: unknown linktype %d\n", m_linktype);
@@ -148,6 +193,10 @@ uint32_t midway_vunit_comm_device::data_r()
 			result = data_r_crusnwld();
 			break;
 
+		case 3:
+			result = data_r_offroadc();
+			break;
+
 		default:
 			result = 0;
 			break;
@@ -167,6 +216,10 @@ void midway_vunit_comm_device::data_w(uint32_t data)
 
 		case 2:
 			data_w_crusnwld(data);
+			break;
+
+		case 3:
+			data_w_offroadc(data);
 			break;
 
 		default:
@@ -204,6 +257,10 @@ void midway_vunit_comm_device::flags_w(uint32_t data)
 			flags_w_crusnwld(data);
 			break;
 
+		case 3:
+			flags_w_offroadc(data);
+			break;
+
 		default:
 			logerror("VUNIT_COMM-flags_w: unknown linktype %d\n", m_linktype);
 			break;
@@ -213,6 +270,8 @@ void midway_vunit_comm_device::flags_w(uint32_t data)
 
 	m_flags = data >> 24;
 }
+
+// ------------------------------------------------
 
 uint32_t midway_vunit_comm_device::data_r_crusnusa()
 {
@@ -503,29 +562,7 @@ void midway_vunit_comm_device::flags_w_crusnusa(uint32_t data)
 	}
 }
 
-uint8_t midway_vunit_comm_device::get_linkcount()
-{
-	return ((m_dsw->read() >> 3) & 0x0003) + 1;
-}
-
-uint32_t midway_vunit_comm_device::get_linkmask_crusnwld()
-{
-	uint8_t linkcount = get_linkcount();
-	switch (linkcount)
-	{
-		case 2:
-			return 0x02000000;
-
-		case 3:
-			return 0x06000000;
-
-		case 4:
-			return 0x0e000000;
-
-		default:
-			return 0x00000000;
-	}
-}
+// ------------------------------------------------
 
 uint32_t midway_vunit_comm_device::data_r_crusnwld()
 {
@@ -1761,6 +1798,299 @@ void midway_vunit_comm_device::flags_w_crusnwld(uint32_t data)
 				osd_printf_verbose("VUNIT_COMM: we are WRITING.\n");
 				break;
 		}
+	}
+}
+
+// ------------------------------------------------
+
+uint32_t midway_vunit_comm_device::data_r_offroadc()
+{
+	uint16_t offset = 0;
+	uint32_t result = 0;
+	switch (m_linkstate)
+	{
+		case 0x100:
+			// start of communication
+			// 2 players = 04;
+			// 3 players = 06;
+			// 4 players = 07;
+			return 0x07000000;
+
+		case 0x101:
+			// handshake
+			return 0x00000000;
+
+		case 0x140:
+			// pre recv 4
+			m_readcount++;
+			if (m_readcount == 0x2)
+			{
+				set_linkstate(0x141);
+				m_link_offset[3] = 0x01;
+				m_readcount = 0;
+			}
+			return 0x00ff0000;
+
+		case 0x141:
+			// recv 4
+			offset = m_link_offset[3];
+			osd_printf_verbose("VUNIT_COMM: read-1.4 %02x.@ %u\n", m_link_buffer[3][offset], offset);
+			result = m_link_buffer[3][offset] << 16;
+			if ((offset % 2))
+				result |= 0x01000000;
+			m_readcount++;
+			if (m_readcount == 2)
+			{
+				m_readcount = 0;
+				m_link_offset[3] += 1;
+			}
+			if (m_link_offset[3] >= m_link_length[3])
+			{
+				set_linkstate(0x142);
+			}
+			return result;
+
+		case 0x142:
+			// after recv 4
+			m_readcount++;
+			if (m_readcount == 0x2)
+			{
+				set_linkstate(0x130);
+				m_readcount = 0;
+			}
+			return 0x01ff0000;
+
+		case 0x130:
+			// pre recv 3
+			m_readcount++;
+			if (m_readcount == 0x2)
+			{
+				set_linkstate(0x131);
+				m_link_offset[2] = 0x01;
+				m_readcount = 0;
+			}
+			return 0x00ff0000;
+
+		case 0x131:
+			// recv 3
+			offset = m_link_offset[2];
+			osd_printf_verbose("VUNIT_COMM: read-1.3 %02x.@ %u\n", m_link_buffer[2][offset], offset);
+			result = m_link_buffer[2][offset] << 16;
+			if ((offset % 2))
+				result |= 0x01000000;
+			m_readcount++;
+			if (m_readcount == 2)
+			{
+				m_readcount = 0;
+				m_link_offset[2] += 1;
+			}
+			if (m_link_offset[2] >= m_link_length[2])
+			{
+				set_linkstate(0x132);
+			}
+			return result;
+
+		case 0x132:
+			// after recv 3
+			m_readcount++;
+			if (m_readcount == 0x2)
+			{
+				set_linkstate(0x120);
+				m_readcount = 0;
+			}
+			return 0x01ff0000;
+
+		case 0x120:
+			// pre recv 2
+			m_readcount++;
+			if (m_readcount == 0x2)
+			{
+				set_linkstate(0x121);
+				m_link_offset[1] = 0x01;
+				m_readcount = 0;
+			}
+			return 0x00ff0000;
+
+		case 0x121:
+			// recv 2
+			offset = m_link_offset[1];
+			osd_printf_verbose("VUNIT_COMM: read-1.2 %02x.@ %u\n", m_link_buffer[1][offset], offset);
+			result = m_link_buffer[1][offset] << 16;
+			if ((offset % 2))
+				result |= 0x01000000;
+			m_readcount++;
+			if (m_readcount == 2)
+			{
+				m_readcount = 0;
+				m_link_offset[1] += 1;
+			}
+			if (m_link_offset[1] >= m_link_length[1])
+			{
+				set_linkstate(0x122);
+			}
+			return result;
+
+		case 0x122:
+			// after recv 2
+			m_readcount++;
+			if (m_readcount == 0x2)
+			{
+				set_linkstate(0x110);
+				m_readcount = 0;
+			}
+			return 0x01ff0000;
+
+		case 0x110:
+			// pre send 1
+			return 0x00ff0000;
+
+		default:
+			return 0;
+	}
+}
+
+void midway_vunit_comm_device::data_w_offroadc(uint32_t data)
+{
+	uint8_t ctrl = (data >> 24) & 0xff;
+	uint8_t payload = (data >> 16) & 0xff;
+
+	// check if comms enabled
+	if (!(m_flags & 0x20))
+		return;
+
+	if (m_linkstate == 0x00)
+	{
+		switch (ctrl & 0xf0)
+		{
+			case 0x80:
+				m_linkid = 1;
+				set_linkstate(0x100);
+				osd_printf_verbose("VUNIT_COMM: we are cab 1 - MASTER.\n");
+				break;
+
+			case 0x40:
+				m_linkid = 2;
+				set_linkstate(0x200);
+				osd_printf_verbose("VUNIT_COMM: we are cab 2 - SLAVE.\n");
+				break;
+
+			case 0x20:
+				m_linkid = 3;
+				set_linkstate(0x300);
+				osd_printf_verbose("VUNIT_COMM: we are cab 3 - SLAVE.\n");
+				break;
+
+			case 0x10:
+				m_linkid = 4;
+				set_linkstate(0x400);
+				osd_printf_verbose("VUNIT_COMM: we are cab 4 - SLAVE.\n");
+				break;
+		}
+	}
+
+	uint16_t offset;
+	switch (m_linkstate)
+	{
+		case 0x100:
+			// start of communication
+			// 0xaa = handshake
+			if (ctrl == 0x80 && payload == 0xaa)
+			{
+				set_linkstate(0x101);
+			}
+			break;
+
+		case 0x101:
+			// handshake
+			// 0x5c = 2 players
+			// 0x5e = 3 players
+			// 0x5f = 4 players
+			if (ctrl == 0x80 && payload == 0x5f)
+			{
+				// recv 4
+				set_linkstate(0x140);
+				m_readcount = 0;
+			}
+			break;
+
+		case 0x110:
+			// pre send 1
+			if (ctrl == 0x90 && payload == 0xff)
+			{
+				set_linkstate(0x111);
+				m_link_offset[0] = 1;
+				m_link_length[0] = 1;
+			}
+			break;
+
+		case 0x111:
+			// send 1
+			offset = m_link_offset[0];
+			osd_printf_verbose("VUNIT_COMM: send-1 %02x @ %u\n", payload, offset);
+			m_link_buffer[0][offset] = payload;
+			offset++;
+			m_link_offset[0] = m_link_length[0] = offset;
+			if (offset == 41)
+			{
+				set_linkstate(0x112);
+				comm_tick();
+			}
+			break;
+
+		case 0x112:
+			// after send 1
+			if (ctrl == 0x80 && payload == 0xff)
+			{
+				set_linkstate(0x100);
+			}
+			break;
+
+		default:
+			if (ctrl == 0x88)
+				set_linkstate(0x100);
+			break;
+	}
+}
+
+void midway_vunit_comm_device::flags_w_offroadc(uint32_t data)
+{
+	uint8_t newflags = (data >> 24) & 0xff;
+	if (newflags != m_flags)
+	{
+		switch (newflags)
+		{
+			case 0x20:
+				osd_printf_verbose("VUNIT_COMM: we are READING.\n");
+				break;
+
+			case 0x60:
+				osd_printf_verbose("VUNIT_COMM: we are WRITING.\n");
+				break;
+		}
+	}
+}
+
+uint8_t midway_vunit_comm_device::get_linkcount()
+{
+	return ((m_dsw->read() >> 3) & 0x0003) + 1;
+}
+
+uint32_t midway_vunit_comm_device::get_linkmask_crusnwld()
+{
+	uint8_t linkcount = get_linkcount();
+	switch (linkcount)
+	{
+		case 2:
+			return 0x02000000;
+
+		case 3:
+			return 0x06000000;
+
+		case 4:
+			return 0x0e000000;
+
+		default:
+			return 0x00000000;
 	}
 }
 

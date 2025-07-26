@@ -69,12 +69,16 @@ private:
 	void data_w_crusnusa(uint32_t data);
 	void flags_w_crusnusa(uint32_t data);
 
-	uint8_t get_linkcount();
-	uint32_t get_linkmask_crusnwld();
-
 	uint32_t data_r_crusnwld();
 	void data_w_crusnwld(uint32_t data);
 	void flags_w_crusnwld(uint32_t data);
+
+	uint32_t data_r_offroadc();
+	void data_w_offroadc(uint32_t data);
+	void flags_w_offroadc(uint32_t data);
+
+	uint8_t get_linkcount();
+	uint32_t get_linkmask_crusnwld();
 
 	void set_linkstate(uint16_t newstate);
 	void wait_recv_ready(uint8_t idx);

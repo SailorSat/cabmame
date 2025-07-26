@@ -58,6 +58,7 @@ private:
 	uint16_t m_link_length[0x04]{};
 	uint16_t m_link_offset[0x04]{};
 	uint8_t m_link_ready[0x04]{};
+	uint8_t m_link_alive[0x04]{};
 
 	uint16_t m_data = 0;
 	uint8_t m_flags = 0;
@@ -77,8 +78,10 @@ private:
 	void data_w_offroadc(uint32_t data);
 	void flags_w_offroadc(uint32_t data);
 
-	uint8_t get_linkcount();
+	uint8_t get_linkcount_crusnwld();
 	uint32_t get_linkmask_crusnwld();
+
+	bool get_linkenabled_offroadc();
 
 	void set_linkstate(uint16_t newstate);
 	void wait_recv_ready(uint8_t idx);

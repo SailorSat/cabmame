@@ -3,6 +3,10 @@
 
 /*
 NOTE: this is a fake device that mimics other vunit systems
+
+TODO:
+- update ASIO code
+- streamline send/recv into common functions instead of copy&paste.
 */
 
 #include "emu.h"

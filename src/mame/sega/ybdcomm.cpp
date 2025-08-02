@@ -2,59 +2,33 @@
 // copyright-holders:Ariane Fugmann
 
 /*
-Comm PCB
---------
-
-MODEL-1 COMMUNICATION BD 837-8842 171-6293B (C) SEGA 1992
-( http://images.arianchen.de/sega-comm/model1-front.jpg / http://images.arianchen.de/sega-comm/model1-back.jpg )
-|--------------------------------------------------------------------------------|
-|                                                                                |
-|    MB89237A            MB89374                                                 |
-|       JP4                                                                 LED1 |
-|    15112.17            Z80                                                     |
-|    JP2  JP3                                                       75179        |
-|    MB8464              315-5624                                     JP6        |
-|                                                       315-5547                 |
-|        315-5611                                            SW1    PC910     CN4|
-|                                                                                |
-|                                                                   PC910     CN5|
-|     MB8421             MB8431                                JP7               |
-|                                                                   JP5          |
-|        JP8                                                                  CN7|
-|                CN1                                    CN2                      |
-| |---------------------------------|   |---------------------------------|   CN6|
-| |---------------------------------|   |---------------------------------|      |
-|--------------------------------------------------------------------------------|
+834-6740
+( http://images.arianchen.de/sega-comm/pdriftl_link_big.jpg )
+|-------------| |-| |--------|---|-|
+| _ 315-5336  RX  TX          CNC  |
+||C|                               |
+||N| MB8421 EPR-12028  MB89372P-SH |
+||A|          5563                 |
+||_|                      315-5337 |
+|    SW1     LED   16MHz     Z80E  |
+|----------------------------------|
 Notes:
-      15112.17 - AMD AM27C100 128k x8 EPROM (DIP32, labelled 'EPR-15112')
-      Z80      - Zilog Z0840008PSC Z80 CPU, running at 8.000MHz (DIP40)
-      MB8464   - Fujitsu MB8464 8k x8 SRAM (DIP28)
-      MB8421   - Fujitsu MB8421-12LP 2k x8 SRAM (SDIP52)
-      MB8431   - Fujitsu MB8431-90LP 2k x8 SRAM (SDIP52)
-      MB89237A - Fujitsu MB89237A DMA-Controller (DIP20) [most likely i8237A clone]
-      MB89374  - Fujitsu MB89374 Data Link Controller (SDIP42)
-      75179    - Texas Instruments SN75179 Differential Driver and Receiver Pair (DIP8)
-      315-5547 - AMI 18CV8PC-25 PAL (DIP20)
-      315-5624 - MMI PAL16L8BCN PAL (DIP20)
-      315-5611 - Lattice GAL16V8A PAL (DIP20)
-      PC910    - Sharp PC910 opto-isolator (x2, DIP8)
-      SW1      - Push Button Switch (enables board)
-      CN1, CN2 - Connectors to join Comm board to Video board
-      CN4      - 8 pin connector (DIFFERENTIAL port)
-      CN5      - 6 pin connector (SERIAL port)
-      CN6, CN7 - TOSLINK-Connectors for network optical cable link
-      JP2      - Jumper, set to 2-3 (connected to EPROM A15)
-      JP3      - Jumper, set to 1-2 (connected to EPROM A16)
-      JP4      - Jumper, set to 1-2
-      JP5      - Jumper, shorted (enables TOSLINK RX channel)
-      JP6      - Jumper, not shorted (enables DIFFERERENTIAL RX channel)
-      JP7      - Jumper, not shorted (enables SERIAL RX channel)
-      JP8      - Jumper, set to 1-2 (selects CLOCK SOURCE)
+     PALs - 315-5337, 315-5336, both PAL16L8
+      Z80 - Clock 8.000MHz [16/2]
+     5563 - Toshiba TC5563APL-12L 8kBx8-bit SRAM
+   MB8421 - Fujitsu 2kBx8-bit Dual-Port SRAM (SDIP52)
+  MB89372 - Fujitsu Multi-Protocol Controller (SDIP64)
+            Uses 3 serial data transfer protocols: ASYNC, COP & BOP. Has a built
+            in DMA controller and Interrupt controller to handle interrupts
+            from the serial interface unit (SIU) & DMA controller (DMAC)
+EPR-12028 - 27C256 EPROM
+      CNA - 50 Pin connector joining to main board
+      CNC - 10 pin connector
+      SW1 - 8-position DIP switch
 */
 
 #include "emu.h"
-#include "m1comm.h"
-
+#include "ybdcomm.h"
 #include "emuopts.h"
 
 #include "asio.h"
@@ -66,8 +40,8 @@ Notes:
 
 #define Z80_TAG "commcpu"
 
-#ifdef M1COMM_SIMULATION
-class sega_m1comm_device::context
+#ifdef YBDCOMM_SIMULATION
+class sega_ybdcomm_device::context
 {
 public:
 	context() :
@@ -82,19 +56,18 @@ public:
 
 	void start()
 	{
-
 		m_thread = std::thread(
 				[this] ()
 				{
-					LOG("M1COMM: network thread started\n");
+					LOG("YBDCOMM: network thread started\n");
 					try {
 						m_ioctx.run();
 					} catch (const std::exception& e) {
-						LOG("M1COMM: Exception in network thread: %s\n", e.what());
+						LOG("YBDCOMM: Exception in network thread: %s\n", e.what());
 					} catch (...) { // Catch any other unknown exceptions
-						LOG("M1COMM: Unknown exception in network thread\n");
+						LOG("YBDCOMM: Unknown exception in network thread\n");
 					}
-					LOG("M1COMM: network thread completed\n");
+					LOG("YBDCOMM: network thread completed\n");
 				});
 	}
 
@@ -121,21 +94,21 @@ public:
 		for (auto &&resolveIte : resolver.resolve(localhost, localport, asio::ip::tcp::resolver::flags::address_configured, err))
 		{
 			m_localaddr = resolveIte.endpoint();
-			LOG("M1COMM: localhost = %s\n", *m_localaddr);
+			LOG("YBDCOMM: localhost = %s\n", *m_localaddr);
 		}
 		if (err)
 		{
-			LOG("M1COMM: localhost resolve error: %s\n", err.message());
+			LOG("YBDCOMM: localhost resolve error: %s\n", err.message());
 		}
 
 		for (auto &&resolveIte : resolver.resolve(remotehost, remoteport, asio::ip::tcp::resolver::flags::address_configured, err))
 		{
 			m_remoteaddr = resolveIte.endpoint();
-			LOG("M1COMM: remotehost = %s\n", *m_remoteaddr);
+			LOG("YBDCOMM: remotehost = %s\n", *m_remoteaddr);
 		}
 		if (err)
 		{
-			LOG("M1COMM: remotehost resolve error: %s\n", err.message());
+			LOG("YBDCOMM: remotehost resolve error: %s\n", err.message());
 		}
 	}
 
@@ -208,7 +181,7 @@ public:
 
 		if (data_size > m_fifo_tx.free())
 		{
-			LOG("M1COMM: TX buffer overflow\n");
+			LOG("YBDCOMM: TX buffer overflow\n");
 			return UINT_MAX;
 		}
 
@@ -321,20 +294,20 @@ private:
 				m_acceptor.listen(1, err);
 				if (!err)
 				{
-					osd_printf_verbose("M1COMM: RX listen on %s\n", *m_localaddr);
+					osd_printf_verbose("YBDCOMM: RX listen on %s\n", *m_localaddr);
 					m_acceptor.async_accept(
 							[this] (std::error_code const &err, asio::ip::tcp::socket sock)
 							{
 								if (err)
 								{
-									LOG("M1COMM: RX error accepting - %d %s\n", err.value(), err.message());
+									LOG("YBDCOMM: RX error accepting - %d %s\n", err.value(), err.message());
 									std::error_code e;
 									m_acceptor.close(e);
 									m_state_rx.store(0);
 								}
 								else
 								{
-									LOG("M1COMM: RX connection from %s\n", sock.remote_endpoint());
+									LOG("YBDCOMM: RX connection from %s\n", sock.remote_endpoint());
 									std::error_code e;
 									m_acceptor.close(e);
 									m_sock_rx = std::move(sock);
@@ -349,7 +322,7 @@ private:
 		}
 		if (err)
 		{
-			LOG("M1COMM: RX failed - %d %s\n", err.value(), err.message());
+			LOG("YBDCOMM: RX failed - %d %s\n", err.value(), err.message());
 		}
 	}
 
@@ -363,14 +336,14 @@ private:
 		{
 			m_sock_tx.set_option(asio::ip::tcp::no_delay(true));
 			m_sock_tx.set_option(asio::socket_base::keep_alive(true));
-			osd_printf_verbose("M1COMM: TX connecting to %s\n", *m_remoteaddr);
+			osd_printf_verbose("YBDCOMM: TX connecting to %s\n", *m_remoteaddr);
 			m_timeout_tx.expires_after(std::chrono::seconds(10));
 			m_timeout_tx.async_wait(
 					[this] (std::error_code const &err)
 					{
 						if (!err && m_state_tx.load() == 1)
 						{
-							osd_printf_verbose("M1COMM: TX connect timed out\n");
+							osd_printf_verbose("YBDCOMM: TX connect timed out\n");
 							std::error_code e;
 							m_sock_tx.close(e);
 							m_state_tx.store(0);
@@ -383,14 +356,14 @@ private:
 						m_timeout_tx.cancel();
 						if (err)
 						{
-							osd_printf_verbose("M1COMM: TX connect error - %d %s\n", err.value(), err.message());
+							osd_printf_verbose("YBDCOMM: TX connect error - %d %s\n", err.value(), err.message());
 							std::error_code e;
 							m_sock_tx.close(e);
 							m_state_tx.store(0);
 						}
 						else
 						{
-							LOG("M1COMM: TX connection established\n");
+							LOG("YBDCOMM: TX connection established\n");
 							m_state_tx.store(2);
 						}
 					});
@@ -408,7 +381,7 @@ private:
 					m_fifo_tx.consume(length);
 					if (err)
 					{
-						LOG("M1COMM: TX connection error: %s\n", err.message().c_str());
+						LOG("YBDCOMM: TX connection error: %s\n", err.message().c_str());
 						m_sock_tx.close();
 						m_state_tx.store(0);
 						m_fifo_tx.clear();
@@ -429,9 +402,9 @@ private:
 					if (err || !length)
 					{
 						if (err)
-							LOG("M1COMM: RX connection error: %s\n", err.message());
+							LOG("YBDCOMM: RX connection error: %s\n", err.message());
 						else
-							LOG("M1COMM: RX connection lost\n");
+							LOG("YBDCOMM: RX connection lost\n");
 						m_sock_rx.close();
 						m_state_rx.store(0);
 						m_fifo_rx.clear();
@@ -440,7 +413,7 @@ private:
 					{
 						if (UINT_MAX == m_fifo_rx.write(&m_buffer_rx[0], length))
 						{
-							LOG("M1COMM: RX buffer overflow\n");
+							LOG("YBDCOMM: RX buffer overflow\n");
 							m_sock_rx.close();
 							m_state_rx.store(0);
 							m_fifo_rx.clear();
@@ -478,78 +451,92 @@ private:
 #endif
 
 /*************************************
- *  M1COMM Memory Map
+ *  YBDCOMM Memory Map
  *************************************/
-void sega_m1comm_device::m1comm_mem(address_map &map)
+void sega_ybdcomm_device::ybdcomm_mem(address_map &map)
 {
-	map(0x0000, 0x7fff).rom();
-	map(0x8000, 0x9fff).ram();
-	map(0xc000, 0xffff).mask(0x0fff).rw(FUNC(sega_m1comm_device::share_r), FUNC(sega_m1comm_device::share_w));
+	map(0x0000, 0x1fff).rom();
+	map(0x2000, 0x3fff).ram();
+	map(0x4000, 0x47ff).rw(m_dpram, FUNC(mb8421_device::left_r), FUNC(mb8421_device::left_w));
 }
 
 /*************************************
- *  M1COMM I/O Map
+ *  YBDCOMM I/O Map
  *************************************/
-void sega_m1comm_device::m1comm_io(address_map &map)
+void sega_ybdcomm_device::ybdcomm_io(address_map &map)
 {
-	map.global_mask(0x7f);
-	map(0x00, 0x1f).rw(m_dlc, FUNC(mb89374_device::read), FUNC(mb89374_device::write));
-	map(0x20, 0x2f).rw(m_dma, FUNC(am9517a_device::read), FUNC(am9517a_device::write));
-	map(0x40, 0x5f).mask(0x01).rw(FUNC(sega_m1comm_device::syn_r), FUNC(sega_m1comm_device::syn_w));
-	map(0x60, 0x7f).mask(0x01).rw(FUNC(sega_m1comm_device::zfg_r), FUNC(sega_m1comm_device::zfg_w));
+	map.global_mask(0xff);
+	//map(0x00, 0x3f).rw(m_mpc, FUNC(mb89372_device::read), FUNC(mb89372_device::write));
+	map(0x40, 0x40).r(FUNC(sega_ybdcomm_device::z80_stat_r));
+	map(0x80, 0x80).w(FUNC(sega_ybdcomm_device::z80_stat_w));
+	map(0xc0, 0xc0).portr("Link_SW1");
 }
 
-ROM_START( m1comm )
-	ROM_REGION( 0x20000, Z80_TAG, ROMREGION_ERASEFF )
-	ROM_DEFAULT_BIOS("epr15112")
+static INPUT_PORTS_START( ybdcomm )
+	PORT_START("Link_SW1")
+	PORT_DIPNAME( 0x0f, 0x01, "Cabinet ID" ) PORT_DIPLOCATION("Link_SW1:1,2,3,4")
+	PORT_DIPSETTING(    0x01, "1" )
+	PORT_DIPSETTING(    0x02, "2" )
+	PORT_DIPSETTING(    0x03, "3" )
+	PORT_DIPSETTING(    0x04, "4" )
+	PORT_DIPSETTING(    0x05, "5" )
+	PORT_DIPSETTING(    0x06, "6" )
+	PORT_DIPSETTING(    0x07, "7" )
+	PORT_DIPSETTING(    0x08, "8" )
+	PORT_DIPNAME( 0xf0, 0x10, "Cabinet Count" ) PORT_DIPLOCATION("Link_SW1:5,6,7,8")
+	PORT_DIPSETTING(    0x20, "2" )
+	PORT_DIPSETTING(    0x30, "3" )
+	PORT_DIPSETTING(    0x40, "4" )
+	PORT_DIPSETTING(    0x50, "5" )
+	PORT_DIPSETTING(    0x60, "6" )
+	PORT_DIPSETTING(    0x70, "7" )
+	PORT_DIPSETTING(    0x80, "8" )
+INPUT_PORTS_END
 
-	// found on Virtua Racing and WingWar
-	ROM_SYSTEM_BIOS( 0, "epr15112", "EPR-15112" )
-	ROMX_LOAD( "epr-15112.17", 0x0000, 0x20000, CRC(4950e771) SHA1(99014124e0324dd114cb22f55159d18b597a155a), ROM_BIOS(0) )
+ROM_START( ybdcomm )
+	ROM_REGION( 0x10000, Z80_TAG, ROMREGION_ERASEFF )
+	ROM_DEFAULT_BIOS("epr12028")
 
-	// found on Virtua Formula
-	ROM_SYSTEM_BIOS( 1, "epr15624", "EPR-15624" )
-	ROMX_LOAD( "epr-15624.17", 0x0000, 0x20000, CRC(9b3ba315) SHA1(0cd0983cc8b2f2d6b41617d0d0a24cc6c188e62a), ROM_BIOS(1) )
+	// found on Power Drift Link
+	ROM_SYSTEM_BIOS( 0, "epr12028", "EPR-12028" )
+	ROMX_LOAD( "epr-12028", 0x000000, 0x008000, CRC(bb682a92) SHA1(0445bdbca0db9edecd826da37cd2d3afc57c5cf6), ROM_BIOS(0) )
 ROM_END
 
 //**************************************************************************
 //  GLOBAL VARIABLES
 //**************************************************************************
 
-DEFINE_DEVICE_TYPE(SEGA_MODEL1_COMM, sega_m1comm_device, "m1comm", "Sega Model-1 Communication Board")
+DEFINE_DEVICE_TYPE(SEGA_YBOARD_COMM, sega_ybdcomm_device, "ybdcomm", "Sega Y-Board Communication Board")
 
 //-------------------------------------------------
 //  device_add_mconfig - add device configuration
 //-------------------------------------------------
 
-void sega_m1comm_device::device_add_mconfig(machine_config &config)
+void sega_ybdcomm_device::device_add_mconfig(machine_config &config)
 {
-	Z80(config, m_cpu, 32_MHz_XTAL / 4);
-	m_cpu->set_memory_map(&sega_m1comm_device::m1comm_mem);
-	m_cpu->set_io_map(&sega_m1comm_device::m1comm_io);
+	Z80(config, m_cpu, 16_MHz_XTAL / 2);
+	m_cpu->set_memory_map(&sega_ybdcomm_device::ybdcomm_mem);
+	m_cpu->set_io_map(&sega_ybdcomm_device::ybdcomm_io);
 
-	AM9517A(config, m_dma, 32_MHz_XTAL / 4);
-	m_dma->out_hreq_callback().set(FUNC(sega_m1comm_device::dma_hreq_w));
-	m_dma->in_memr_callback().set(FUNC(sega_m1comm_device::dma_mem_r));
-	m_dma->out_memw_callback().set(FUNC(sega_m1comm_device::dma_mem_w));
-	m_dma->out_dack_callback<2>().set(m_dlc, FUNC(mb89374_device::pi3_w));
-	m_dma->out_dack_callback<3>().set(m_dlc, FUNC(mb89374_device::pi2_w));
-	m_dma->out_eop_callback().set(m_dlc, FUNC(mb89374_device::ci_w));
-	m_dma->in_ior_callback<2>().set(m_dlc, FUNC(mb89374_device::dma_r));
-	m_dma->out_iow_callback<3>().set(m_dlc, FUNC(mb89374_device::dma_w));
+	MB8421(config, m_dpram).intl_callback().set(FUNC(sega_ybdcomm_device::dpram_int5_w));
 
-	MB89374(config, m_dlc, 32_MHz_XTAL / 4);
-	m_dlc->out_po_callback<2>().set(m_dma, FUNC(am9517a_device::dreq3_w));
-	m_dlc->out_po_callback<3>().set(m_dma, FUNC(am9517a_device::dreq2_w));
-	m_dlc->out_irq_callback().set(FUNC(sega_m1comm_device::dlc_int7_w));
+	/*
+	MB89372(config, m_mpc, 16_MHz_XTAL / 2);
+	m_mpc->out_hreq_callback().set(FUNC(sega_ybdcomm_device::mpc_hreq_w));
+	m_mpc->out_irq_callback().set(FUNC(sega_ybdcomm_device::mpc_int7_w));
+	m_mpc->in_memr_callback().set(FUNC(sega_ybdcomm_device::mpc_mem_r));
+	m_mpc->out_memw_callback().set(FUNC(sega_ybdcomm_device::mpc_mem_w));
+	*/
 }
 
-//-------------------------------------------------
-//  rom_region - device-specific ROM region
-//-------------------------------------------------
-const tiny_rom_entry *sega_m1comm_device::device_rom_region() const
+ioport_constructor sega_ybdcomm_device::device_input_ports() const
 {
-	return ROM_NAME( m1comm );
+	return INPUT_PORTS_NAME( ybdcomm );
+}
+
+const tiny_rom_entry *sega_ybdcomm_device::device_rom_region() const
+{
+	return ROM_NAME( ybdcomm );
 }
 
 //**************************************************************************
@@ -557,16 +544,17 @@ const tiny_rom_entry *sega_m1comm_device::device_rom_region() const
 //**************************************************************************
 
 //-------------------------------------------------
-//  sega_m1comm_device - constructor
+//  sega_ybdcomm_device - constructor
 //-------------------------------------------------
 
-sega_m1comm_device::sega_m1comm_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock) :
-	device_t(mconfig, SEGA_MODEL1_COMM, tag, owner, clock),
+sega_ybdcomm_device::sega_ybdcomm_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock) :
+	device_t(mconfig, SEGA_YBOARD_COMM, tag, owner, clock),
 	m_cpu(*this, Z80_TAG),
-	m_dma(*this, "commdma"),
-	m_dlc(*this, "commdlc")
+	m_dpram(*this, "dpram"),
+	//m_mpc(*this, "commmpc"),
+	m_dip_sw1(*this, "Link_SW1")
 {
-#ifdef M1COMM_SIMULATION
+#ifdef YBDCOMM_SIMULATION
 	m_framesync = mconfig.options().comm_framesync() ? 0x01 : 0x00;
 #endif
 }
@@ -575,12 +563,25 @@ sega_m1comm_device::sega_m1comm_device(const machine_config &mconfig, const char
 //  device_start - device-specific startup
 //-------------------------------------------------
 
-void sega_m1comm_device::device_start()
+void sega_ybdcomm_device::device_start()
 {
-#ifdef M1COMM_SIMULATION
+	// state saving
+	save_item(NAME(m_ybd_stat));
+	save_item(NAME(m_z80_stat));
+
+#ifdef YBDCOMM_SIMULATION
+	m_tick_timer = timer_alloc(FUNC(sega_ybdcomm_device::tick_timer_callback), this);
+	m_tick_timer->adjust(attotime::never);
+
 	auto ctx = std::make_unique<context>();
 	m_context = std::move(ctx);
 	m_context->start();
+
+	save_item(NAME(m_linkenable));
+	save_item(NAME(m_linktimer));
+	save_item(NAME(m_linkalive));
+	save_item(NAME(m_linkid));
+	save_item(NAME(m_linkcount));
 #endif
 }
 
@@ -588,14 +589,12 @@ void sega_m1comm_device::device_start()
 //  device_reset - device-specific reset
 //-------------------------------------------------
 
-void sega_m1comm_device::device_reset()
+void sega_ybdcomm_device::device_reset()
 {
-	std::fill(std::begin(m_shared), std::end(m_shared), 0);
-	m_syn = 0;
-	m_zfg = 0;
-	m_cn = 0;
-	m_fg = 0;
-#ifdef M1COMM_SIMULATION
+	m_ybd_stat = 0;
+	m_z80_stat = 0;
+
+#ifdef YBDCOMM_SIMULATION
 	std::fill(std::begin(m_buffer), std::end(m_buffer), 0);
 
 	auto const &opts = mconfig().options();
@@ -606,166 +605,243 @@ void sega_m1comm_device::device_reset()
 	m_linkalive = 0;
 	m_linkid = 0;
 	m_linkcount = 0;
+
+	m_tick_timer->adjust(attotime::from_hz(600), 0, attotime::from_hz(600));
 #endif
 }
 
-void sega_m1comm_device::device_stop()
+void sega_ybdcomm_device::device_stop()
 {
-#ifdef M1COMM_SIMULATION
+#ifdef YBDCOMM_SIMULATION
+	m_tick_timer->adjust(attotime::never);
+
 	m_context->stop();
 	m_context.reset();
 #endif
 }
 
-void sega_m1comm_device::device_reset_after_children()
+void sega_ybdcomm_device::device_reset_after_children()
 {
 	m_cpu->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
-	m_dma->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
-	m_dlc->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
+	//m_mpc->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
 }
 
-void sega_m1comm_device::dma_hreq_w(int state)
+uint8_t sega_ybdcomm_device::ex_r(offs_t offset)
+{
+	int bank = offset >> 11;
+
+	switch (bank)
+	{
+		case 0:
+			return m_dpram->right_r(offset);
+
+		case 1:
+			// z80 status
+			if (!machine().side_effects_disabled())
+				LOG("ybdcomm-ex_r: %02x %02x\n", bank, m_z80_stat);
+			return m_z80_stat;
+
+		case 2:
+			// status register?
+			if (!machine().side_effects_disabled())
+				LOG("ybdcomm-ex_r: %02x %02x\n", bank, m_ybd_stat);
+			return m_ybd_stat;
+
+		default:
+			logerror("ybdcomm-ex_r: %02x\n", offset);
+			return 0xff;
+	}
+}
+
+
+void sega_ybdcomm_device::ex_w(offs_t offset, uint8_t data)
+{
+	int bank = offset >> 11;
+
+	switch (bank)
+	{
+		case 0:
+			m_dpram->right_w(offset, data);
+			break;
+
+		case 1:
+			// z80 status
+			if (!machine().side_effects_disabled())
+				logerror("ybdcomm-ex_w: %02x %02x\n", offset, data);
+			break;
+
+		case 2:
+			// status register?
+			// bit 7 = on/off toggle
+			// bit 1 = test flag?
+			// bit 0 = ready to send?
+			m_ybd_stat = data;
+			if (!machine().side_effects_disabled())
+				LOG("ybdcomm-ex_w: %02x %02x\n", offset, data);
+#ifndef YBDCOMM_SIMULATION
+			if (m_ybd_stat & 0x80)
+			{
+				m_cpu->set_input_line(INPUT_LINE_RESET, CLEAR_LINE);
+				//m_mpc->set_input_line(INPUT_LINE_RESET, CLEAR_LINE);
+			}
+			else
+			{
+				device_reset();
+				device_reset_after_children();
+			}
+#else
+			if (m_ybd_stat & 0x80)
+			{
+				// link active
+				if (!m_linkenable)
+				{
+					// init command
+					osd_printf_verbose("YBDCOMM: board enabled\n");
+					m_linkenable = 0x01;
+					m_linkid = 0x00;
+					m_linkalive = 0x00;
+					m_linkcount = 0x00;
+					m_linktimer = 0x003a;
+
+					// read dips and write to shared memory
+					uint8_t sw1 = m_dip_sw1->read();
+					mpc_mem_w(0x4000, sw1 & 0x0f);
+					mpc_mem_w(0x4001, (sw1 >> 4) & 0x0f);
+				}
+			}
+			else
+			{
+				if (m_linkenable)
+				{
+					// reset command
+					osd_printf_verbose("YBDCOMM: board disabled\n");
+					m_linkenable = 0x00;
+				}
+			}
+#endif
+			break;
+		default:
+			logerror("ybdcomm-ex_w: %02x %02x\n", offset, data);
+			break;
+	}
+}
+
+void sega_ybdcomm_device::mpc_hreq_w(int state)
 {
 	m_cpu->set_input_line(INPUT_LINE_HALT, state ? ASSERT_LINE : CLEAR_LINE);
-	m_dma->hack_w(state);
+	//m_mpc->hack_w(state);
 }
 
-uint8_t sega_m1comm_device::dma_mem_r(offs_t offset)
+void sega_ybdcomm_device::dpram_int5_w(int state)
+{
+	m_cpu->set_input_line_and_vector(0, state ? ASSERT_LINE : CLEAR_LINE, 0xef); // Z80 INT5
+}
+
+void sega_ybdcomm_device::mpc_int7_w(int state)
+{
+	logerror("mpc_int7_w: %02x\n", state);
+	m_cpu->set_input_line_and_vector(0, state ? ASSERT_LINE : CLEAR_LINE, 0xff); // Z80 INT7
+}
+
+uint8_t sega_ybdcomm_device::mpc_mem_r(offs_t offset)
 {
 	return m_cpu->space(AS_PROGRAM).read_byte(offset);
 }
 
-void sega_m1comm_device::dma_mem_w(offs_t offset, uint8_t data)
+void sega_ybdcomm_device::mpc_mem_w(offs_t offset, uint8_t data)
 {
 	m_cpu->space(AS_PROGRAM).write_byte(offset, data);
 }
 
-void sega_m1comm_device::dlc_int7_w(int state)
+uint8_t sega_ybdcomm_device::z80_stat_r()
 {
-	m_cpu->set_input_line_and_vector(0, state ? ASSERT_LINE : CLEAR_LINE, 0xff); // Z80
+	return m_ybd_stat;
 }
 
-uint8_t sega_m1comm_device::syn_r()
+void sega_ybdcomm_device::z80_stat_w(uint8_t data)
 {
-	return m_syn | 0xfc;
+	m_z80_stat = data;
 }
 
-void sega_m1comm_device::syn_w(uint8_t data)
+
+#ifdef YBDCOMM_SIMULATION
+TIMER_CALLBACK_MEMBER(sega_ybdcomm_device::tick_timer_callback)
 {
-	m_syn = data & 0x03;
-}
-
-uint8_t sega_m1comm_device::zfg_r()
-{
-	return m_zfg | (~m_fg << 7) | 0x7e;
-}
-
-void sega_m1comm_device::zfg_w(uint8_t data)
-{
-	m_zfg = data & 0x01;
-}
-
-uint8_t sega_m1comm_device::share_r(offs_t offset)
-{
-	return m_shared[offset];
-}
-
-void sega_m1comm_device::share_w(offs_t offset, uint8_t data)
-{
-	m_shared[offset] = data;
-}
-
-uint8_t sega_m1comm_device::cn_r()
-{
-	return m_cn | 0xfe;
-}
-
-void sega_m1comm_device::cn_w(uint8_t data)
-{
-	m_cn = data & 0x01;
-
-#ifndef M1COMM_SIMULATION
-	if (!m_cn)
-	{
-		device_reset();
-		device_reset_after_children();
-	}
-	else
-	{
-		m_cpu->set_input_line(INPUT_LINE_RESET, CLEAR_LINE);
-		m_dma->set_input_line(INPUT_LINE_RESET, CLEAR_LINE);
-		m_dlc->set_input_line(INPUT_LINE_RESET, CLEAR_LINE);
-	}
-#else
-	if (!m_cn)
-	{
-		// reset command
-		osd_printf_verbose("M1COMM: board disabled\n");
-		m_linkenable = 0x00;
-		m_zfg = 0x00;
-	}
-	else
-	{
-		// init command
-		osd_printf_verbose("M1COMM: board enabled\n");
-		m_linkenable = 0x01;
-		m_linkid = 0x00;
-		m_linkalive = 0x00;
-		m_linkcount = 0x00;
-		m_linktimer = 0x00e8; // 58 fps * 4s
-	}
-#endif
-}
-
-uint8_t sega_m1comm_device::fg_r()
-{
-	return m_fg | (~m_zfg << 7) | 0x7e;
-}
-
-void sega_m1comm_device::fg_w(uint8_t data)
-{
-	if (!m_cn)
-		return;
-
-	m_fg = data & 0x01;
-}
-
-void sega_m1comm_device::check_vint_irq()
-{
-#ifndef M1COMM_SIMULATION
-	if (m_syn & 0x02)
-	{
-		m_cpu->set_input_line_and_vector(0, HOLD_LINE, 0xef); // Z80
-	}
-#else
 	comm_tick();
-#endif
 }
 
-#ifdef M1COMM_SIMULATION
-void sega_m1comm_device::comm_tick()
+unsigned sega_ybdcomm_device::comm_frame_offset(uint8_t cab_index)
+{
+	switch (cab_index)
+	{
+		case 1:
+			return 0x4010;
+
+		case 2:
+			return 0x4190;
+		case 3:
+			return 0x41c0;
+		case 4:
+			return 0x41f0;
+		case 5:
+			return 0x4220;
+		case 6:
+			return 0x4250;
+		case 7:
+			return 0x4280;
+		case 8:
+			return 0x42b0;
+
+		default:
+			return 0x4400;
+	}
+}
+
+unsigned sega_ybdcomm_device::comm_frame_size(uint8_t cab_index)
+{
+	switch (cab_index)
+	{
+		case 1:
+			return 0x0180;
+
+		case 2:
+		case 3:
+		case 4:
+		case 5:
+		case 6:
+		case 7:
+		case 8:
+			return 0x0030;
+
+		default:
+			return 0x0000;
+	}
+}
+
+void sega_ybdcomm_device::comm_tick()
 {
 	m_context->check_sockets();
 
 	if (m_linkenable == 0x01)
 	{
-		unsigned frame_size = 0x01c4;
-		unsigned data_size = frame_size + 1;
+		uint8_t cab_index = mpc_mem_r(0x4000);
 
-		bool is_master = (m_shared[1] == 0x01);
-		bool is_slave = (m_shared[1] == 0x02);
-		bool is_relay = (m_shared[1] == 0x00);
+		unsigned data_size = 0x180 + 1;
+
+		bool is_master = (cab_index == 0x01);
+		bool is_slave = (cab_index > 0x01);
+		bool is_relay = (cab_index == 0x00);
 
 		if (m_linkalive == 0x02)
 		{
-			// link failed...
-			m_shared[0] = 0xff;
+			// link failed... (guesswork)
+			m_z80_stat = 0xff;
 			return;
 		}
 		else if (m_linkalive == 0x00)
 		{
-			// link not yet established...
-			m_shared[0] = 0x05;
+			// link not yet established... (guesswork)
+			m_z80_stat = 0x00;
 
 			// if both sockets are there check ring
 			if (m_context->connected())
@@ -777,7 +853,7 @@ void sega_m1comm_device::comm_tick()
 					// check message id
 					uint8_t idx = m_buffer[0];
 
-					// 0xFF - link id
+					// 0xff - link id
 					if (idx == 0xff)
 					{
 						if (is_master)
@@ -801,7 +877,7 @@ void sega_m1comm_device::comm_tick()
 						}
 					}
 
-					// 0xFE - link size
+					// 0xfe - link size
 					else if (idx == 0xfe)
 					{
 						if (is_slave || is_relay)
@@ -813,15 +889,13 @@ void sega_m1comm_device::comm_tick()
 						}
 
 						// consider it done
-						LOG("M1COMM: link established - id %02x of %02x\n", m_linkid, m_linkcount);
+						LOG("YBDCOMM: link established - id %02x of %02x\n", m_linkid, m_linkcount);
 						m_linkalive = 0x01;
-						m_zfg = 0x01;
 
 						// write to shared mem
-						m_shared[0] = 0x01;
-						m_shared[2] = m_linkid;
-						m_shared[3] = m_linkcount;
+						m_z80_stat = 0x01;
 					}
+
 
 					if (m_linkalive == 0x00)
 						recv = read_frame(data_size);
@@ -848,14 +922,11 @@ void sega_m1comm_device::comm_tick()
 						send_frame(data_size);
 
 						// consider it done
-						LOG("M1COMM: link established - id %02x of %02x\n", m_linkid, m_linkcount);
+						LOG("YBDCOMM: link established - id %02x of %02x\n", m_linkid, m_linkcount);
 						m_linkalive = 0x01;
-						m_zfg = 0x01;
 
 						// write to shared mem
-						m_shared[0] = 0x01;
-						m_shared[2] = m_linkid;
-						m_shared[3] = m_linkcount;
+						m_z80_stat = 0x01;
 					}
 
 					else if (m_linktimer > 0x01)
@@ -870,8 +941,6 @@ void sega_m1comm_device::comm_tick()
 		if (m_linkalive == 0x01)
 		{
 			// link established
-			unsigned frame_start = 0x0010;
-
 			do
 			{
 				// try to read a message
@@ -882,37 +951,24 @@ void sega_m1comm_device::comm_tick()
 					uint8_t idx = m_buffer[0];
 					if (idx > 0 && idx <= m_linkcount)
 					{
-						// if not own message
-						if (idx != m_linkid)
+						// save message to "ring buffer"
+						unsigned frame_offset = comm_frame_offset(idx);
+						unsigned frame_size = comm_frame_size(idx);
+						for (unsigned j = 0x00; j < frame_size; j++)
 						{
-							// save message to "ring buffer"
-							std::copy_n(&m_buffer[1], frame_size, &m_shared[frame_start + (idx * frame_size)]);
+							mpc_mem_w(frame_offset + j, m_buffer[1 + j]);
+						}
 
+						// if not own message
+						if (idx != cab_index)
+						{
 							// forward message to other nodes
 							send_frame(data_size);
 						}
-					}
-					else
-					{
-						if (idx == 0xfc)
+						else
 						{
-							// 0xFC - VSYNC
+							m_z80_stat &= 0x7f;
 							m_linktimer = 0x00;
-							if (!is_master)
-								// forward message to other nodes
-								send_frame(data_size);
-						}
-						if (idx == 0xfd)
-						{
-							// 0xFD - master addional bytes
-							if (!is_master)
-							{
-								// save message to "ring buffer"
-								std::copy_n(&m_buffer[1], 0x0a, &m_shared[0x06]);
-
-								// forward message to other nodes
-								send_frame(data_size);
-							}
 						}
 					}
 
@@ -922,73 +978,69 @@ void sega_m1comm_device::comm_tick()
 			}
 			while (m_linktimer == 0x01);
 
-			// enable wait for vsync
-			m_linktimer = m_framesync;
+			m_z80_stat ^= 0x01;
 
 			// update "ring buffer" if link established
 			// live relay does not send data
-			if (m_linkid != 0x00)
+			if (cab_index != 0x00)
 			{
 				// check ready-to-send flag
-				if (m_shared[4] != 0x00)
+				if (m_ybd_stat & 0x01)
 				{
-					send_data(m_linkid, frame_start, frame_size, data_size);
+					unsigned frame_offset = comm_frame_offset(cab_index);
+					unsigned frame_size = comm_frame_size(cab_index);
+					send_data(cab_index, frame_offset, frame_size, data_size);
+					m_z80_stat |= 0x80;
 
-					// save message to "ring buffer"
-					std::copy_n(&m_buffer[1], frame_size, &m_shared[frame_start + (m_linkid * frame_size)]);
-				}
-
-				if (is_master)
-				{
-					// master sends additional status bytes
-					send_data(0xfd, 0x06, 0x0a, data_size);
-
-					// send vsync
-					m_buffer[0] = 0xfc;
-					m_buffer[1] = 0x01;
-					send_frame(data_size);
+					// enable wait for sync
+					m_linktimer = m_framesync;
 				}
 			}
 
-			// clear 05
-			m_shared[5] = 0x00;
+			// clear ready-to-send flag
+			m_ybd_stat &= 0xfe;
 		}
 	}
 }
 
-unsigned sega_m1comm_device::read_frame(unsigned data_size)
+unsigned sega_ybdcomm_device::read_frame(unsigned data_size)
 {
 	unsigned bytes_read = m_context->receive(&m_buffer[0], data_size);
 	if (bytes_read == UINT_MAX)
 	{
 		if (m_linkalive == 0x01)
 		{
-			LOG("M1COMM: link lost\n");
+			LOG("YBDCOMM: link lost\n");
 			m_linkalive = 0x02;
 			m_linktimer = 0x00;
+			m_z80_stat = 0xff;
 		}
 		return 0;
 	}
 	return bytes_read;
 }
 
-void sega_m1comm_device::send_data(uint8_t frame_type, unsigned frame_start, unsigned frame_size, unsigned data_size)
+void sega_ybdcomm_device::send_data(uint8_t frame_type, unsigned frame_offset, unsigned frame_size, unsigned data_size)
 {
 	m_buffer[0] = frame_type;
-	std::copy_n(&m_shared[frame_start], frame_size, &m_buffer[1]);
+	for (unsigned i = 0x00; i < frame_size; i++)
+	{
+		m_buffer[1 + i] = mpc_mem_r(frame_offset + i);
+	}
 	send_frame(data_size);
 }
 
-void sega_m1comm_device::send_frame(unsigned data_size)
+void sega_ybdcomm_device::send_frame(unsigned data_size)
 {
 	unsigned bytes_sent = m_context->send(&m_buffer[0], data_size);
 	if (bytes_sent == UINT_MAX)
 	{
 		if (m_linkalive == 0x01)
 		{
-			LOG("M1COMM: link lost\n");
+			LOG("YBDCOMM: link lost\n");
 			m_linkalive = 0x02;
 			m_linktimer = 0x00;
+			m_z80_stat = 0xff;
 		}
 	}
 }

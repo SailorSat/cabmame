@@ -3598,6 +3598,7 @@ ALLOW_SAVE_TYPE(namcos22_dsp_upload_state);
 void namcos22_state::machine_start()
 {
 	m_mcu_out.resolve();
+	m_mcu_output.resolve();
 	m_cpuled_out.resolve();
 	m_portbits[0] = 0xffff;
 	m_portbits[1] = 0xffff;

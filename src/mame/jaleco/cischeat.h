@@ -7,6 +7,8 @@
 
 // TODO: better inheritance, eventually split individual driver files
 
+#include "cischeat_comlink.h"
+
 #include "sound/okim6295.h"
 #include "machine/gen_latch.h"
 #include "machine/ticket.h"
@@ -42,6 +44,7 @@ public:
 		, m_soundlatch2(*this, "soundlatch2")
 		, m_gatearray(*this, "gatearray")
 		, m_leds(*this, "led%u", 0U)
+		, m_comlink(*this, "comlink")
 	{}
 
 	void scudhamm_motor_command_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
@@ -163,6 +166,7 @@ protected:
 	optional_device<generic_latch_16_device> m_soundlatch2;
 	optional_device<megasys1_gatearray_device> m_gatearray;
 	output_finder<5> m_leds;
+	optional_device<jaleco_cischeat_comlink_device> m_comlink;
 };
 
 class armchamp2_state : public cischeat_state

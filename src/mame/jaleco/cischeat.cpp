@@ -245,7 +245,8 @@ void cischeat_state::bigrun_map(address_map &map)
 	    Each board expects reads from the other boards and writes to own bank.
 	    Amusingly, if you run the communication test as ID = X then soft reset -> ID = Y, what was at ID = X gets an OK in the second test
 	    so it's likely to be the only thing needed. */
-	map(0x084000, 0x0847ff).ram();                                                 // Linking with other units
+	//map(0x084000, 0x0847ff).ram();                                                 // Linking with other units
+	map(0x084000, 0x0847ff).rw(m_comlink, FUNC(jaleco_cischeat_comlink_device::share_r), FUNC(jaleco_cischeat_comlink_device::share_w));
 	map(0x088000, 0x08bfff).ram().share("share2"); // Sharedram with sub CPU#2
 	map(0x08c000, 0x08ffff).ram().share("share1"); // Sharedram with sub CPU#1
 
@@ -296,7 +297,8 @@ void cischeat_state::cischeat_map(address_map &map)
 	map(0x082308, 0x082309).w(FUNC(cischeat_state::cischeat_comms_w));
 	map(0x082400, 0x082401).w(FUNC(cischeat_state::active_layers_w));
 
-	map(0x088000, 0x0887ff).ram();                                                                     // Linking with other units
+	//map(0x088000, 0x0887ff).ram();                                                                     // Linking with other units
+	map(0x088000, 0x0887ff).rw(m_comlink, FUNC(jaleco_cischeat_comlink_device::share_r), FUNC(jaleco_cischeat_comlink_device::share_w));
 
 /*  Only the first 0x800 bytes are tested but:
     CPU #0 PC 0000278c: warning - write 68c0 to unmapped memory address 0009c7fe
@@ -359,7 +361,8 @@ void cischeat_state::f1gpstar_map(address_map &map)
 	map(0x082308, 0x082309).nopr().w(FUNC(cischeat_state::f1gpstar_comms_w));
 	map(0x082400, 0x082401).w(FUNC(cischeat_state::active_layers_w));
 
-	map(0x088000, 0x0883ff).ram();                                                                     // Linking with other units
+	//map(0x088000, 0x0883ff).ram();                                                                     // Linking with other units
+	map(0x088000, 0x0887ff).rw(m_comlink, FUNC(jaleco_cischeat_comlink_device::share_r), FUNC(jaleco_cischeat_comlink_device::share_w));
 
 	map(0x090000, 0x097fff).ram().share("share2"); // Sharedram with sub CPU#2
 	map(0x098000, 0x09ffff).ram().share("share1"); // Sharedram with sub CPU#1
@@ -481,7 +484,8 @@ void cischeat_state::f1gpstr2_map(address_map &map)
 	map(0x082400, 0x082401).w(FUNC(cischeat_state::active_layers_w));
 
 	// 0x100 RAM banks instead of 0x200
-	map(0x088000, 0x0887ff).ram();                                                                     // Linking with other units
+	//map(0x088000, 0x0887ff).ram();                                                                     // Linking with other units
+	map(0x088000, 0x0887ff).rw(m_comlink, FUNC(jaleco_cischeat_comlink_device::share_r), FUNC(jaleco_cischeat_comlink_device::share_w));
 
 	map(0x090000, 0x097fff).ram().share("share2"); // Sharedram with sub CPU#2
 	map(0x098000, 0x09ffff).ram().share("share1"); // Sharedram with sub CPU#1
@@ -1316,13 +1320,15 @@ static INPUT_PORTS_START( cischeat )
 	PORT_DIPSETTING(      0x0000, DEF_STR( On ) )
 
 	PORT_START("IN5")   // DSW 3 (4 bits, Cabinet Linking) - $82200.w
-	PORT_DIPUNKNOWN_DIPLOC( 0x01, 0x01, "SW1:1" )
-	PORT_DIPNAME( 0x06, 0x06, "Unit ID (2)" ) PORT_DIPLOCATION("SW1:2,3")   // -> f0020 (like DSW2 !!)
-	PORT_DIPSETTING(    0x06, "Use other" )
+	PORT_DIPNAME( 0x01, 0x00, "Link ID" ) PORT_DIPLOCATION("SW1:1")
+	PORT_DIPSETTING(    0x00, "Master Unit" )
+	PORT_DIPSETTING(    0x01, "Other Units" )
+	PORT_DIPNAME( 0x06, 0x00, "Unit ID (2)" ) PORT_DIPLOCATION("SW1:2,3")   // -> f0020 (like DSW2 !!)
 	PORT_DIPSETTING(    0x00, "0 (Red Car)" )
 	PORT_DIPSETTING(    0x02, "1 (Blue Car)" )
 	PORT_DIPSETTING(    0x04, "2 (Yellow Car)" )
-	PORT_DIPUNKNOWN_DIPLOC( 0x08, 0x08, "SW1:4" )
+	PORT_DIPSETTING(    0x06, "3 (Green Car)" )
+	PORT_DIPUNKNOWN_DIPLOC(  0x08, 0x00, "SW1:4")       /* Always ON according to manual */
 	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_UNKNOWN )
 	PORT_BIT( 0x40, IP_ACTIVE_LOW, IPT_UNKNOWN )
@@ -2061,7 +2067,11 @@ TIMER_DEVICE_CALLBACK_MEMBER(cischeat_state::bigrun_scanline)
 	}
 
 	if(scanline == 240) // vblank-out irq
+	{
 		m_cpu1->set_input_line(4, HOLD_LINE);
+		if (m_comlink != nullptr)
+			m_comlink->handle_vint_irq();
+	}
 
 	if(scanline == 0)
 		m_cpu1->set_input_line(2, HOLD_LINE);
@@ -2114,6 +2124,9 @@ void cischeat_state::bigrun(machine_config &config)
 	MEGASYS1_TILEMAP(config, m_tmap[0], m_palette, 0x0e00/2);
 	MEGASYS1_TILEMAP(config, m_tmap[1], m_palette, 0x1600/2);
 	MEGASYS1_TILEMAP(config, m_tmap[2], m_palette, 0x3600/2);
+
+	// COM-LINK
+	JALECO_CISCOHEAT_COMLINK(config, m_comlink, 0U);
 
 	/* sound hardware */
 	SPEAKER(config, "speaker", 2).front();
@@ -2688,6 +2701,7 @@ ROM_END
 
 void cischeat_state::init_bigrun()
 {
+	m_comlink->setup_comlink(0x200, 4);
 	cischeat_untangle_sprites("sprites");   // Untangle sprites
 }
 
@@ -2806,6 +2820,7 @@ ROM_END
 
 void cischeat_state::init_cischeat()
 {
+	m_comlink->setup_comlink(0x200, 4);
 	cischeat_untangle_sprites("sprites");   // Untangle sprites
 }
 
@@ -3186,6 +3201,7 @@ ROM_END
 
 void cischeat_state::init_f1gpstar()
 {
+	m_comlink->setup_comlink(0x100, 8);
 	cischeat_untangle_sprites("sprites");
 }
 

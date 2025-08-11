@@ -82,40 +82,21 @@ public:
 
 	void start()
 	{
-
-		m_thread = std::thread(
-				[this] ()
-				{
-					LOG("M1COMM: network thread started\n");
-					try {
-						m_ioctx.run();
-					} catch (const std::exception& e) {
-						LOG("M1COMM: Exception in network thread: %s\n", e.what());
-					} catch (...) { // Catch any other unknown exceptions
-						LOG("M1COMM: Unknown exception in network thread\n");
-					}
-					LOG("M1COMM: network thread completed\n");
-				});
 	}
 
 	void reset(std::string localhost, std::string localport, std::string remotehost, std::string remoteport)
 	{
-		m_ioctx.post(
-				[this] ()
-				{
-					std::error_code err;
-					if (m_acceptor.is_open())
-						m_acceptor.close(err);
-					if (m_sock_rx.is_open())
-						m_sock_rx.close(err);
-					if (m_sock_tx.is_open())
-						m_sock_tx.close(err);
-					m_timeout_tx.cancel();
-					m_state_rx.store(0);
-					m_state_tx.store(0);
-				});
-
 		std::error_code err;
+		if (m_acceptor.is_open())
+			m_acceptor.close(err);
+		if (m_sock_rx.is_open())
+			m_sock_rx.close(err);
+		if (m_sock_tx.is_open())
+			m_sock_tx.close(err);
+		m_timeout_tx.cancel();
+		m_state_rx.store(0);
+		m_state_tx.store(0);
+
 		asio::ip::tcp::resolver resolver(m_ioctx);
 
 		for (auto &&resolveIte : resolver.resolve(localhost, localport, asio::ip::tcp::resolver::flags::address_configured, err))
@@ -141,47 +122,35 @@ public:
 
 	void stop()
 	{
-		m_ioctx.post(
-				[this] ()
-				{
-					std::error_code err;
-					if (m_acceptor.is_open())
-						m_acceptor.close(err);
-					if (m_sock_rx.is_open())
-						m_sock_rx.close(err);
-					if (m_sock_tx.is_open())
-						m_sock_tx.close(err);
-					m_timeout_tx.cancel();
-					m_state_rx.store(0);
-					m_state_tx.store(0);
-					m_ioctx.stop();
-				});
-		m_work_guard.reset();
-		if (m_thread.joinable()) {
-			m_thread.join();
-		}
+		std::error_code err;
+		if (m_acceptor.is_open())
+			m_acceptor.close(err);
+		if (m_sock_rx.is_open())
+			m_sock_rx.close(err);
+		if (m_sock_tx.is_open())
+			m_sock_tx.close(err);
+		m_timeout_tx.cancel();
+		m_state_rx.store(0);
+		m_state_tx.store(0);
+		m_ioctx.stop();
 	}
 
 	void check_sockets()
 	{
+		// if async operation in progress, poll context
+		if ((m_state_rx > 0) || (m_state_tx > 0))
+			m_ioctx.poll();
+
 		// start acceptor if needed
 		if (m_localaddr && m_state_rx.load() == 0)
 		{
-			m_ioctx.post(
-					[this] ()
-					{
-						start_accept();
-					});
+			start_accept();
 		}
 
 		// connect socket if needed
 		if (m_remoteaddr && m_state_tx.load() == 0)
 		{
-			m_ioctx.post(
-					[this] ()
-					{
-						start_connect();
-					});
+			start_connect();
 		}
 	}
 
@@ -194,6 +163,8 @@ public:
 	{
 		if (m_state_rx.load() < 2)
 			return UINT_MAX;
+
+		m_ioctx.poll();
 
 		if (data_size > m_fifo_rx.used())
 			return 0;
@@ -215,11 +186,10 @@ public:
 		bool const sending = m_fifo_tx.used();
 		m_fifo_tx.write(&buffer[0], data_size);
 		if (!sending)
-			m_ioctx.post(
-					[this] ()
-					{
-						start_send_tx();
-					});
+			start_send_tx();
+
+		m_ioctx.poll();
+
 		return data_size;
 	}
 
@@ -229,7 +199,6 @@ private:
 	public:
 		unsigned write(uint8_t *buffer, unsigned data_size)
 		{
-			std::lock_guard<std::mutex> lock(m_mutex);
 			unsigned used = 0;
 			if (m_wp >= m_rp)
 			{
@@ -250,7 +219,6 @@ private:
 
 		unsigned read(uint8_t *buffer, unsigned data_size, bool peek)
 		{
-			std::lock_guard<std::mutex> lock(m_mutex);
 			unsigned rp = m_rp;
 			unsigned used = 0;
 			if (rp >= m_wp)
@@ -276,26 +244,22 @@ private:
 
 		void consume(unsigned data_size)
 		{
-			std::lock_guard<std::mutex> lock(m_mutex);
 			m_rp = (m_rp + data_size) % m_buffer.size();
 			m_used -= data_size;
 		}
 
 		unsigned used()
 		{
-			std::lock_guard<std::mutex> lock(m_mutex);
 			return m_used;
 		}
 
 		unsigned free()
 		{
-			std::lock_guard<std::mutex> lock(m_mutex);
 			return m_buffer.size() - m_used;
 		}
 
 		void clear()
 		{
-			std::lock_guard<std::mutex> lock(m_mutex);
 			m_wp = m_rp = m_used = 0;
 		}
 
@@ -305,7 +269,6 @@ private:
 		unsigned m_rp = 0;
 		unsigned m_used = 0;
 		std::array<uint8_t, 0x80000> m_buffer;
-		std::mutex m_mutex;
 	};
 
 	void start_accept()
@@ -459,9 +422,7 @@ private:
 				util::string_format(std::forward<Format>(fmt), std::forward<Params>(args)...));
 	}
 
-	std::thread m_thread;
 	asio::io_context m_ioctx;
-	asio::executor_work_guard<asio::io_context::executor_type> m_work_guard{m_ioctx.get_executor()};
 	std::optional<asio::ip::tcp::endpoint> m_localaddr;
 	std::optional<asio::ip::tcp::endpoint> m_remoteaddr;
 	asio::ip::tcp::acceptor m_acceptor;

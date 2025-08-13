@@ -557,7 +557,7 @@ void k056230_device::regs_map(address_map &map)
 			LOGMASKED(LOG_REG_WRITES, "%s: Control Register write %02x\n", machine().describe_context(), data);
 			set_ctrl(data);
 		})
-	);
+	),
 	map(0x02, 0x02).lw8(
 		NAME([this] (offs_t offset, u8 data) {
 			/*

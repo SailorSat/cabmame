@@ -2,12 +2,12 @@
 // copyright-holders:Ariane Fugmann
 
 /*
-There are in fact 4 boards.
+There are in fact 3 boards.
 Exact differences are unknown.
 
 COM-LINK PCB BR-8956
 COM-LINK PCB CH-9074
-part numbers for f-1 grand prix star (II) unknown.
+it seems f-1 grand prix star (II) has this included on the PCB.
 */
 
 #include "emu.h"

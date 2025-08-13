@@ -646,7 +646,8 @@ void taitojc_state::taitojc_map(address_map &map)
 	map(0x0660004c, 0x0660004f).portw("EEPROMOUT");
 	map(0x06800001, 0x06800001).w(FUNC(taitojc_state::irq_unk_w));
 	map(0x06a00000, 0x06a01fff).rw("taito_en:dpram", FUNC(mb8421_device::left_r), FUNC(mb8421_device::left_w)).umask32(0xff000000);
-	map(0x06c00000, 0x06c0001f).rw(FUNC(taitojc_state::lan_r), FUNC(taitojc_state::lan_w)).umask32(0x00ff0000);
+	map(0x06c00000, 0x06c0001f).m(m_com20020, FUNC(com20020_device::regs_map)).umask32(0x00ff0000); // Network
+	//map(0x06c00000, 0x06c0001f).rw(FUNC(taitojc_state::lan_r), FUNC(taitojc_state::lan_w)).umask32(0x00ff0000);
 	map(0x08000000, 0x080fffff).ram().share(m_main_ram);
 	map(0x10000000, 0x10001fff).rw(FUNC(taitojc_state::dsp_shared_r), FUNC(taitojc_state::dsp_shared_w)).umask32(0xffff0000);
 	map(0x10001ff8, 0x10001ff9).r(FUNC(taitojc_state::dsp_to_main_7fe_r));
@@ -1125,6 +1126,10 @@ void taitojc_state::taitojc(machine_config &config)
 	m_tc0640fio->read_7_callback().set_ioport("BUTTONS");
 
 	GFXDECODE(config, m_gfxdecode, m_palette, gfxdecode_device::empty);
+
+	// network
+	COM20020(config, m_com20020, 0U);
+	m_com20020->irq_cb().set_inputline("maincpu", 4);
 
 	/* video hardware */
 	SCREEN(config, m_screen, SCREEN_TYPE_RASTER);

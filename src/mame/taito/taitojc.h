@@ -13,6 +13,8 @@
 #include "taitoio.h"
 #include "tc0780fpa.h"
 
+#include "machine/com20020.h"
+
 #include "emupal.h"
 #include "screen.h"
 #include "tilemap.h"
@@ -27,6 +29,7 @@ public:
 		, m_dsp(*this,"dsp")
 		, m_tc0640fio(*this, "tc0640fio")
 		, m_tc0780fpa(*this, "tc0780fpa")
+		, m_com20020(*this, "com20020")
 		, m_gfxdecode(*this, "gfxdecode")
 		, m_screen(*this, "screen")
 		, m_palette(*this, "palette")
@@ -58,6 +61,7 @@ protected:
 	required_device<cpu_device> m_dsp;
 	required_device<tc0640fio_device> m_tc0640fio;
 	required_device<tc0780fpa_device> m_tc0780fpa;
+	optional_device<com20020_device> m_com20020;
 	required_device<gfxdecode_device> m_gfxdecode;
 	required_device<screen_device> m_screen;
 	required_device<palette_device> m_palette;

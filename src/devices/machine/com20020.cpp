@@ -439,7 +439,7 @@ private:
 #define REG_1_COMMAND  14
 #define REG_7_3_TEST   15
 
-DEFINE_DEVICE_TYPE(COM20020, com20020_device, "COM20020", "COM20020 ULANC")
+DEFINE_DEVICE_TYPE(COM20020, com20020_device, "com20020", "COM20020 ULANC")
 
 com20020_device::com20020_device(const machine_config &mconfig, const char *tag, device_t *owner, uint32_t clock)
 	: device_t(mconfig, COM20020, tag, owner, clock),

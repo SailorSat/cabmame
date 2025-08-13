@@ -74,6 +74,7 @@
 
 #include "cpu/m68000/m68020.h"
 #include "machine/adc0808.h"
+#include "machine/com20020.h"
 #include "machine/eepromser.h"
 #include "sound/es5506.h"
 
@@ -94,6 +95,7 @@ public:
 		m_maincpu(*this, "maincpu"),
 		m_tc0620scc(*this, "tc0620scc"),
 		m_tc0480scp(*this, "tc0480scp"),
+		m_com20020(*this, "com20020"),
 		m_gfxdecode(*this, "gfxdecode"),
 		m_palette(*this, "palette"),
 		m_spritemap(*this, "spritemap")
@@ -112,6 +114,7 @@ private:
 	required_device<cpu_device> m_maincpu;
 	required_device<tc0620scc_device> m_tc0620scc;
 	required_device<tc0480scp_device> m_tc0480scp;
+	required_device<com20020_device> m_com20020;
 	required_device<gfxdecode_device> m_gfxdecode;
 	required_device<palette_device> m_palette;
 	required_region_ptr<u16> m_spritemap;
@@ -472,7 +475,7 @@ void groundfx_state::prg_map(address_map &map)
 	map(0x920000, 0x92000f).rw(m_tc0620scc, FUNC(tc0620scc_device::ctrl_r), FUNC(tc0620scc_device::ctrl_w));
 	map(0xa00000, 0xa0ffff).ram().w(m_palette, FUNC(palette_device::write32)).share("palette");
 	map(0xb00000, 0xb003ff).ram();                     // ?? single bytes, blending ??
-	map(0xc00000, 0xc00007).nopr(); // Network?
+	map(0xc00000, 0xc00007).m(m_com20020, FUNC(com20020_device::regs_map)); // Network
 	map(0xd00000, 0xd00003).w(FUNC(groundfx_state::rotate_control_w)); // perhaps port based rotate control?
 	// f00000 is seat control?
 }
@@ -564,6 +567,10 @@ void groundfx_state::groundfx(machine_config &config)
 	tc0510nio.write_3_callback().append("eeprom", FUNC(eeprom_serial_93cxx_device::cs_write)).bit(4);
 	tc0510nio.write_4_callback().set(FUNC(groundfx_state::coin_word_w));
 	tc0510nio.read_7_callback().set_ioport("SYSTEM");
+
+	// network
+	COM20020(config, m_com20020, 0U);
+	m_com20020->irq_cb().set_inputline("maincpu", 6);
 
 	// video hardware
 	screen_device &screen(SCREEN(config, "screen", SCREEN_TYPE_RASTER));

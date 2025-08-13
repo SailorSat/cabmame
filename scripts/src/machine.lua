@@ -1025,6 +1025,17 @@ if (MACHINES["CHESSMACHINE"]~=null) then
 	}
 end
 
+---------------------------------------------------
+--
+--@src/devices/machine/com20020.h,MACHINES["COM20020"] = true
+---------------------------------------------------
+
+if (MACHINES["COM20020"]~=null) then
+	files {
+		MAME_DIR .. "src/devices/machine/com20020.cpp",
+		MAME_DIR .. "src/devices/machine/com20020.h",
+	}
+end
 
 ---------------------------------------------------
 --

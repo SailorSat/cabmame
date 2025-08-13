@@ -5,10 +5,11 @@
 
 #pragma once
 
-#include "machine/eepromser.h"
 #include "tc0100scn.h"
 #include "tc0360pri.h"
 #include "tc0480scp.h"
+#include "machine/eepromser.h"
+#include "machine/com20020.h"
 #include "emupal.h"
 
 class undrfire_state : public driver_device
@@ -21,6 +22,7 @@ public:
 		m_tc0620scc(*this, "tc0620scc"),
 		m_tc0480scp(*this, "tc0480scp"),
 		m_tc0360pri(*this, "tc0360pri"),
+		m_com20020(*this, "com20020"),
 		m_eeprom(*this, "eeprom"),
 		m_ram(*this, "ram"),
 		m_shared_ram(*this, "shared_ram"),
@@ -60,6 +62,7 @@ private:
 	required_device<tc0620scc_device> m_tc0620scc;
 	required_device<tc0480scp_device> m_tc0480scp;
 	optional_device<tc0360pri_device> m_tc0360pri; // cbombers
+	optional_device<com20020_device> m_com20020;
 	required_device<eeprom_serial_93cxx_device> m_eeprom;
 	optional_shared_ptr<u32> m_ram;
 	optional_shared_ptr<u16> m_shared_ram;

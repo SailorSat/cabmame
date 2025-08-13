@@ -356,7 +356,7 @@ void undrfire_state::cbombers_cpua_map(address_map &map)
 	map(0x920000, 0x92000f).rw(m_tc0620scc, FUNC(tc0620scc_device::ctrl_r), FUNC(tc0620scc_device::ctrl_w));
 	map(0xa00000, 0xa0ffff).ram().w(m_palette, FUNC(palette_device::write32)).share("palette");
 	map(0xb00000, 0xb0000f).rw(m_tc0360pri, FUNC(tc0360pri_device::read), FUNC(tc0360pri_device::write)); /* TC0360PRI */
-	map(0xc00000, 0xc00007).ram(); /* LAN controller? */
+	map(0xc00000, 0xc00007).m(m_com20020, FUNC(com20020_device::regs_map)); // Network
 	map(0xd00000, 0xd00003).w(FUNC(undrfire_state::rotate_control_w));     /* perhaps port based rotate control? */
 	map(0xe00000, 0xe0ffff).rw(FUNC(undrfire_state::shared_ram_r), FUNC(undrfire_state::shared_ram_w));
 }
@@ -589,6 +589,10 @@ void undrfire_state::cbombers(machine_config &config)
 	tc0510nio.write_3_callback().append(m_eeprom, FUNC(eeprom_serial_93cxx_device::cs_write)).bit(4);
 	tc0510nio.write_4_callback().set(FUNC(undrfire_state::coin_word_w));
 	tc0510nio.read_7_callback().set_ioport("SYSTEM");
+
+	// network
+	COM20020(config, m_com20020, 0U);
+	m_com20020->irq_cb().set_inputline("maincpu", 6);
 
 	/* video hardware */
 	screen_device &screen(SCREEN(config, "screen", SCREEN_TYPE_RASTER));

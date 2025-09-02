@@ -5,8 +5,8 @@
     Namco C345 - Serial I/F Controller
 
 ***************************************************************************/
-#ifndef MAME_NAMCO_C345_H
-#define MAME_NAMCO_C345_H
+#ifndef MAME_NAMCO_NAMCO_C345_H
+#define MAME_NAMCO_NAMCO_C345_H
 
 #pragma once
 
@@ -69,4 +69,4 @@ private:
 // device type definition
 DECLARE_DEVICE_TYPE(NAMCO_C345, namco_c345_device)
 
-#endif // MAME_NAMCO_C345_H
+#endif // MAME_NAMCO_NAMCO_C345_H

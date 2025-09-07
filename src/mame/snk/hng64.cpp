@@ -672,9 +672,6 @@ LVS-DG2
 #include "emu.h"
 #include "hng64.h"
 
-#include "cpu/mips/mips3.h"
-#include "cpu/z80/kl5c80a12.h"
-#include "cpu/z80/z80.h"
 #include "machine/nvram.h"
 
 #define LOG_COMRW           (1U << 1)
@@ -720,15 +717,17 @@ void hng64_state::hng_comm_io_map(address_map &map)
 //  map(0x3c, 0x3f).noprw();              /* Reserved */
 
 	/* General IO */
-//  map(0x40, 0x47).rw("ulanc", FUNC(com20020_device::read), FUNC(com20020_device::write));
+	map(0x40, 0x47).m(m_com20020, FUNC(com20020_device::regs_map));
 	map(0x50, 0x57).rw(FUNC(hng64_state::hng64_com_share_r), FUNC(hng64_state::hng64_com_share_w));
 	map(0x72, 0x72).w(FUNC(hng64_state::hng64_com_bank_w));
 //  map(0x73, 0x73).w(hng64_state::));            /* dunno yet */
+	map(0x80, 0x80).r(FUNC(hng64_state::hng64_link_dips_r));
 }
 
 
 void hng64_state::reset_net()
 {
+	m_comm->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
 //  m_comm->pulse_input_line(INPUT_LINE_NMI, attotime::zero); // reset the CPU and let 'er rip
 //  m_comm->set_input_line(INPUT_LINE_HALT, ASSERT_LINE);     // hold on there pardner...
 }
@@ -738,8 +737,20 @@ void hng64_state::hng64_network(machine_config &config)
 	KL5C80A12(config, m_comm, HNG64_MASTER_CLOCK / 4);        /* KL5C80A12CFP - binary compatible with Z80. */
 	m_comm->set_addrmap(AS_PROGRAM, &hng64_state::hng_comm_map);
 	m_comm->set_addrmap(AS_IO, &hng64_state::hng_comm_io_map);
+
+	COM20020(config, m_com20020, 0U);
+	m_com20020->irq_cb().set(FUNC(hng64_state::com20020_int_w));
 }
 
+uint8_t hng64_state::hng64_link_dips_r()
+{
+	return m_linkdsw->read();
+}
+
+void hng64_state::com20020_int_w(int state)
+{
+	osd_printf_verbose("com20020_int_w() %u.\n", state);
+}
 
 uint32_t hng64_state::hng64_com_r(offs_t offset, uint32_t mem_mask)
 {
@@ -754,27 +765,164 @@ void hng64_state::hng64_com_w(offs_t offset, uint32_t data, uint32_t mem_mask)
 }
 
 /* TODO: fully understand this */
+/*
+	assumption: these are two 16-bit fifos (and not latches)
+	reason: on comm-boot check, they bounce around for a few times, before the mips writes 4 values to the fifo right after another, without checking for the comm cpu to handle them.
+*/
 void hng64_state::hng64_com_share_mips_w(offs_t offset, uint8_t data)
 {
-	m_com_shared[offset ^ 3] = data;
+	switch (offset)
+	{
+		case 0:
+		case 1:
+			// Host2Comm-fifo
+			m_com_shared[offset ^ 1] = data;
+			if (offset & 1)
+			{
+				m_com_shared[4] |= 0x01; // set Host2Comm-used
+				m_com_shared[5] &= 0xfe; // clear Host2Comm-free
+				osd_printf_verbose("hng64_com_share_mips_w: Host2Comm-fifo %02x%02x\n", m_com_shared[1], m_com_shared[0]);
+			}
+			break;
+		case 2:
+		case 3:
+			// Comm2Host-fifo
+			if (!machine().side_effects_disabled())
+				machine().debug_break();
+			break;
+		case 4:
+		case 5:
+			// 4 - not sure, always 00
+			// 5 - not sure, both 00 and 02
+			/*
+			if (!machine().side_effects_disabled())
+				osd_printf_verbose("hng64_com_share_mips_w: offset %02x, data %02x\n", offset, data);
+			*/
+			break;
+		case 7:
+			// ctrl? (enable/disable comm? reset comm?)
+			if (data == 0x00)
+			{
+				m_comm->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
+			}
+			if (data == 0x02)
+			{
+				m_comm->set_input_line(INPUT_LINE_RESET, CLEAR_LINE);
+				m_com_shared[4] = 0x02; // clear Host2Comm-used, set Comm2Host-free
+				m_com_shared[5] = 0x01; // set Host2Comm-free, clear Comm2Host-used
+			}
+			break;
+		default:
+			if (!machine().side_effects_disabled())
+			{
+				osd_printf_verbose("hng64_com_share_mips_w: offset %02x, data %02x\n", offset, data);
+				machine().debug_break();
+			}
+			break;
+	}
 }
 
 uint8_t hng64_state::hng64_com_share_mips_r(offs_t offset)
 {
-	return m_com_shared[offset];
+	// offset 5 - 1 = Host2Comm-free, 2 = Comm2Host-used
+	uint8_t data = m_com_shared[offset];
+	switch (offset)
+	{
+		case 0:
+		case 1:
+			// Host2Comm-fifo
+			if (!machine().side_effects_disabled())
+				machine().debug_break();
+			break;
+		case 2:
+		case 3:
+			// Comm2Host-fifo
+			if ((offset & 1) && !(machine().side_effects_disabled()))
+			{
+				m_com_shared[4] |= 0x02; // set Comm2Host-free
+				m_com_shared[5] &= 0xfd; // clear Comm2Host-used
+				osd_printf_verbose("hng64_com_share_mips_r: Comm2Host-fifo %02x%02x\n", m_com_shared[3], m_com_shared[2]);
+				m_com_shared[3] = m_com_shared[2] = 0;
+			}
+			break;
+		default:
+			break;
+	}
+
+/*
+	if (!machine().side_effects_disabled())
+		osd_printf_verbose("hng64_com_share_mips_r: offset %02x, data %02x\n", offset, data);
+*/
+	return data;
 }
 
 void hng64_state::hng64_com_share_w(offs_t offset, uint8_t data)
 {
-	m_com_shared[offset] = data;
+	switch (offset)
+	{
+		case 0:
+		case 1:
+			// Host2Comm-fifo
+			if (!machine().side_effects_disabled())
+				machine().debug_break();
+			break;
+		case 2:
+		case 3:
+			// Comm2Host-fifo
+			m_com_shared[offset ^ 1] = data;
+			if (offset & 1)
+			{
+				m_com_shared[4] &= 0xfd; // clear Comm2Host-freem
+				m_com_shared[5] |= 0x02; // set Comm2Host-used
+				osd_printf_verbose("hng64_com_share_w: Comm2Host-fifo %02x%02x\n", m_com_shared[3], m_com_shared[2]);
+				set_irq(0x0800);
+			}
+			break;
+		default:
+			if (!machine().side_effects_disabled())
+			{
+				osd_printf_verbose("hng64_com_share_w: offset %02x, data %02x\n", offset, data);
+				machine().debug_break();
+			}
+			break;
+	}
 }
 
 uint8_t hng64_state::hng64_com_share_r(offs_t offset)
 {
-	if(offset == 4)
-		return m_com_shared[offset] | 1; // some busy flag?
+	uint8_t data = m_com_shared[offset];
+	switch (offset)
+	{
+		case 0:
+		case 1:
+			// Host2Comm-fifo
+			if ((offset & 1) && !(machine().side_effects_disabled()))
+			{
+				m_com_shared[4] &= 0xfe; // clear Host2Comm-used
+				m_com_shared[5] |= 0x01; // set Host2Comm-free
+				osd_printf_verbose("hng64_com_share_r: Host2Comm-fifo %02x%02x\n", m_com_shared[1], m_com_shared[0]);
+				m_com_shared[1] = m_com_shared[0] = 0;
+			}
+			break;
+		case 2:
+		case 3:
+			// Comm2Host-fifo
+			if (!machine().side_effects_disabled())
+				machine().debug_break();
+			break;
+		case 4:
+			// 1 = Host2Comm-used / 2 = Comm2Host-used
+			break;
+		default:
+			break;
+	}
 
-	return m_com_shared[offset];
+/*
+	if (!machine().side_effects_disabled())
+		osd_printf_verbose("hng64_com_share_r: offset %02x, data %02x\n", offset, data);
+*/
+
+	return data;
 }
 
 void hng64_state::hng64_com_bank_w(uint8_t data)
@@ -1238,7 +1386,8 @@ void hng64_state::hng_map(address_map &map)
 
 	// Dualport RAM (shared with Communications CPU)
 	map(0xc0000000, 0xc0000fff).rw(FUNC(hng64_state::hng64_com_r), FUNC(hng64_state::hng64_com_w)).share("com_ram");
-	map(0xc0001000, 0xc0001007).ram().share("comhack");//.rw(FUNC(hng64_state::hng64_com_share_mips_r), FUNC(hng64_state::hng64_com_share_mips_w));
+	map(0xc0001000, 0xc0001007).rw(FUNC(hng64_state::hng64_com_share_mips_r), FUNC(hng64_state::hng64_com_share_mips_w)).share("comhack");
+	//map(0xc0001000, 0xc0001007).ram().share("comhack");
 }
 
 
@@ -1462,6 +1611,9 @@ static INPUT_PORTS_START( hng64 ) // base port, for debugging
 	PORT_START("AN5")
 	PORT_START("AN6")
 	PORT_START("AN7")
+
+	PORT_START("LINK")
+	PORT_BIT( 0xff, IP_ACTIVE_LOW, IPT_UNKNOWN )
 INPUT_PORTS_END
 
 
@@ -1573,6 +1725,37 @@ static INPUT_PORTS_START( hng64_drive )
 
 	PORT_MODIFY("AN2")
 	PORT_BIT( 0xff, 0x00, IPT_PEDAL2 ) PORT_MINMAX(0x00,0xff) PORT_SENSITIVITY(50) PORT_KEYDELTA(60) PORT_PLAYER(1) PORT_NAME("Brake")
+
+	PORT_MODIFY("LINK")
+	PORT_DIPNAME( 0x0f, 0x01, "ID" )
+	PORT_DIPSETTING(    0x00, "0" )
+	PORT_DIPSETTING(    0x01, "1" )
+	PORT_DIPSETTING(    0x02, "2" )
+	PORT_DIPSETTING(    0x03, "3" )
+	PORT_DIPSETTING(    0x04, "4" )
+	PORT_DIPSETTING(    0x05, "5" )
+	PORT_DIPSETTING(    0x06, "6" )
+	PORT_DIPSETTING(    0x07, "7" )
+	PORT_DIPSETTING(    0x08, "8" )
+	PORT_DIPSETTING(    0x09, "9" )
+	PORT_DIPSETTING(    0x0a, "A" )
+	PORT_DIPSETTING(    0x0b, "B" )
+	PORT_DIPSETTING(    0x0c, "C" )
+	PORT_DIPSETTING(    0x0d, "D" )
+	PORT_DIPSETTING(    0x0e, "E" )
+	PORT_DIPSETTING(    0x0f, "F" )
+	PORT_DIPNAME( 0x80, 0x80, "DIP1" )
+	PORT_DIPSETTING(    0x80, DEF_STR( On ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
+	PORT_DIPNAME( 0x40, 0x00, "DIP2" )
+	PORT_DIPSETTING(    0x40, DEF_STR( On ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
+	PORT_DIPNAME( 0x20, 0x20, "DIP3" )
+	PORT_DIPSETTING(    0x20, DEF_STR( On ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
+	PORT_DIPNAME( 0x10, 0x00, "DIP4" )
+	PORT_DIPSETTING(    0x10, DEF_STR( On ) )
+	PORT_DIPSETTING(    0x00, DEF_STR( Off ) )
 INPUT_PORTS_END
 
 
@@ -2130,7 +2313,7 @@ TIMER_DEVICE_CALLBACK_MEMBER(hng64_state::hng64_irq)
 		case 224: set_irq(0x0001);  break; // lv 0 vblank irq
 //      case 32:  set_irq(0x0008);  break; // lv 2
 //      case 64:  set_irq(0x0008);  break; // lv 2
-		case 240: set_irq(0x0800);  break; // lv 11 network irq?
+//		case 240: set_irq(0x0800);  break; // lv 11 network irq?
 
 		default:
 		{
@@ -2233,7 +2416,7 @@ TIMER_CALLBACK_MEMBER(hng64_state::comhack_callback)
 	LOG("comhack_callback %04x\n\n", m_comhack[0]);
 
 	// different network IDs give different default colours for the cars in roadedge
-	uint8_t network_id = 0x01;
+	//uint8_t network_id = 0x01;
 
 	// this fixes the stuck scroller text in the xrally intro (largest pink text) but prevents the inputs from working.
 	// It's probably trying to sync the scroller with another unit? however the original machines can run as singles
@@ -2242,7 +2425,7 @@ TIMER_CALLBACK_MEMBER(hng64_state::comhack_callback)
 	// network_id |= 0x08;
 
 
-	m_comhack[0] = m_comhack[0] | network_id;
+	//m_comhack[0] = m_comhack[0] | network_id;
 }
 
 

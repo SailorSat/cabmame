@@ -6,8 +6,10 @@
 #pragma once
 
 #include "cpu/mips/mips3.h"
+#include "cpu/z80/kl5c80a12.h"
 #include "cpu/nec/v5x.h"
 #include "cpu/tlcs870/tlcs870.h"
+#include "machine/com20020.h"
 #include "machine/mb8421.h"
 #include "machine/msm6242.h"
 #include "machine/timer.h"
@@ -158,6 +160,7 @@ public:
 		m_dsp(*this, "l7a1045"),
 		m_comm(*this, "network"),
 		m_rtc(*this, "rtc"),
+		m_com20020(*this, "com20020"),
 		m_mainram(*this, "mainram"),
 		m_cart(*this, "gameprg"),
 		m_sysregs(*this, "sysregs"),
@@ -177,6 +180,7 @@ public:
 		m_com_bank(*this, "com_bank"),
 		m_gfxdecode(*this, "gfxdecode"),
 		m_in(*this, "IN%u", 0U),
+		m_linkdsw(*this, "LINK"),
 		m_samsho64_3d_hack(0),
 		m_roadedge_3d_hack(0)
 	{
@@ -224,8 +228,9 @@ private:
 	required_device<hng64_lamps_device> m_lamps;
 	required_device<idt71321_device> m_dt71321_dpram;
 	required_device<l7a1045_sound_device> m_dsp;
-	required_device<cpu_device> m_comm;
+	required_device<kl5c80a12_device> m_comm;
 	required_device<msm6242_device> m_rtc;
+	required_device<com20020_device> m_com20020;
 
 	required_shared_ptr<uint32_t> m_mainram;
 	required_region_ptr<uint32_t> m_cart;
@@ -252,6 +257,7 @@ private:
 	required_device<gfxdecode_device> m_gfxdecode;
 
 	required_ioport_array<8> m_in;
+	required_ioport m_linkdsw;
 
 	template <unsigned N> void hng64_default_lamps_w(uint8_t data) { logerror("lamps%u %02x\n", N, data); }
 
@@ -408,6 +414,10 @@ private:
 	void ioport4_w(uint8_t data);
 
 	void sio0_w(int state);
+
+	// comm stuff
+	uint8_t hng64_link_dips_r();
+	void com20020_int_w(int state);
 
 	uint8_t m_port7 = 0;
 	uint8_t m_port1 = 0;

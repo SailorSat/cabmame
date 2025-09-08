@@ -21,7 +21,7 @@ Notes:
 
 #include <iostream>
 
-#define VERBOSE (0)
+#define VERBOSE (1)
 #include "logmacro.h"
 
 class com20020_device::context
@@ -463,12 +463,14 @@ void com20020_device::device_start()
 	save_item(NAME(m_cmd_tx));
 	save_item(NAME(m_cmd_rx));
 	save_item(NAME(m_cfg));
+	save_item(NAME(m_map));
 }
 
 void com20020_device::device_reset()
 {
 	std::fill(std::begin(m_ram), std::end(m_ram), 0);
 	std::fill(std::begin(m_reg), std::end(m_reg), 0);
+	std::fill(std::begin(m_map), std::end(m_map), 0);
 
 	auto const &opts = mconfig().options();
 	m_context->reset(opts.comm_localhost(), opts.comm_localport(), opts.comm_remotehost(), opts.comm_remoteport());
@@ -523,7 +525,7 @@ void com20020_device::regs_map(address_map &map)
 			// 0x01 TA/TTA*
 			return m_reg[REG_0_STATUS];
 		}),
-		NAME([this] (offs_t offset, u8 data) {
+		NAME([this] (offs_t offset, uint8_t data) {
 			// REG_0_IRQMASK
 			m_reg[REG_0_IRQMASK] = data & 0x8f;
 			update_irq();
@@ -540,9 +542,20 @@ void com20020_device::regs_map(address_map &map)
 			// 0x04 TENTID
 			// 0x02 NEWNEXTID
 			// 0x01 x
-			return m_reg[REG_1_DIAG];
+			uint8_t result = m_reg[REG_1_DIAG];
+			if (!machine().side_effects_disabled())
+			{
+				m_reg[REG_1_DIAG] &= 0x0a; // keep EXCNAK and NEWNEXTID
+				if (m_reg[REG_1_DIAG] == result)
+				{
+					m_reg[REG_1_DIAG] |= 0x30; // fake activity RCVACT, TOKEN
+					if (m_map[m_reg[REG_7_0_TENTID]] == 0x01)
+						m_reg[REG_1_DIAG] |= 0x04; // set TENTID
+				}
+			}
+			return result;
 		}),
-		NAME([this] (offs_t offset, u8 data) {
+		NAME([this] (offs_t offset, uint8_t data) {
 			// REG_1_COMMAND
 			uint8_t cmd_type = data & 0x07;
 			switch (cmd_type)
@@ -610,7 +623,7 @@ void com20020_device::regs_map(address_map &map)
 			// 0x01 A8
 			return m_reg[REG_2_ADDR_H];
 		}),
-		NAME([this] (offs_t offset, u8 data) {
+		NAME([this] (offs_t offset, uint8_t data) {
 			// REG_2_ADDR_H
 			m_reg[REG_2_ADDR_H] = data & 0xc7;
 		})
@@ -621,7 +634,7 @@ void com20020_device::regs_map(address_map &map)
 			// A7-A0
 			return m_reg[REG_3_ADDR_L];
 		}),
-		NAME([this] (offs_t offset, u8 data) {
+		NAME([this] (offs_t offset, uint8_t data) {
 			// REG_3_ADDR_L
 			m_reg[REG_3_ADDR_L] = data;
 			if (m_reg[REG_2_ADDR_H] & 0x80)
@@ -650,7 +663,7 @@ void com20020_device::regs_map(address_map &map)
 				}
 			return result;
 		}),
-		NAME([this] (offs_t offset, u8 data) {
+		NAME([this] (offs_t offset, uint8_t data) {
 			// REG_4_DATA
 			m_reg[REG_4_DATA] = data;
 
@@ -683,7 +696,7 @@ void com20020_device::regs_map(address_map &map)
 			// R/W is used to determin chip revisions
 			return m_reg[REG_5_SUBADDR];
 		}),
-		NAME([this] (offs_t offset, u8 data) {
+		NAME([this] (offs_t offset, uint8_t data) {
 			// REG_5_SUBADDR
 			m_reg[REG_5_SUBADDR] = data & 0x8f;
 			m_reg[REG_6_CONFIG] = (m_reg[REG_6_CONFIG] & 0xfc) | (data & 0x03);
@@ -695,7 +708,7 @@ void com20020_device::regs_map(address_map &map)
 			// REG_6_CONFIG
 			return m_reg[REG_6_CONFIG];
 		}),
-		NAME([this] (offs_t offset, u8 data) {
+		NAME([this] (offs_t offset, uint8_t data) {
 			// REG_6_CONFIG
 			m_reg[REG_6_CONFIG] = data;
 			m_reg[REG_5_SUBADDR] = data & 0x3;
@@ -713,13 +726,16 @@ void com20020_device::regs_map(address_map &map)
 			}
 			if (reg == REG_7_3_NEXTID)
 			{
-				m_reg[REG_1_DIAG] &= 0xfd; // clear NEWNEXTID
-				update_irq();
+				if (!machine().side_effects_disabled())
+				{
+					m_reg[REG_1_DIAG] &= 0xfd; // clear NEWNEXTID
+					update_irq();
+				}
 			}
 
 			return m_reg[reg];
 		}),
-		NAME([this] (offs_t offset, u8 data) {
+		NAME([this] (offs_t offset, uint8_t data) {
 			// REG_7_SUBREG
 			uint8_t reg = REG_7_0_TENTID + m_reg[REG_5_SUBADDR];
 			if (reg > REG_7_4_SETUP2)
@@ -729,6 +745,10 @@ void com20020_device::regs_map(address_map &map)
 			{
 				case REG_7_0_TENTID:
 					m_reg[reg] = data;
+					if (m_map[data] == 0x01)
+						m_reg[REG_1_DIAG] |= 0x04; // set TENTID
+					else
+						m_reg[REG_1_DIAG] &= 0xfb; // clear TENTID
 					break;
 				case REG_7_1_NODEID:
 					m_reg[reg] = data;
@@ -737,7 +757,10 @@ void com20020_device::regs_map(address_map &map)
 					m_ram[1] = data;
 					// fake activity
 					m_reg[REG_0_STATUS] |= 0x04; // RECON
-					m_reg[REG_1_DIAG] = 0xb0; // MY-RECON, RCVACT & TOKEN
+					m_reg[REG_1_DIAG] = 0xb0; // MY-RECON, RCVACT, TOKEN
+
+					update_map(data);
+					update_irq();
 					break;
 				case REG_7_2_SETUP1:
 					m_reg[reg] = data & 0xdf;
@@ -783,6 +806,48 @@ void com20020_device::update_irq()
 	}
 }
 
+void com20020_device::update_map(uint8_t id)
+{
+	// check if "new" node
+	if (m_map[id] == 0x00)
+	{
+		m_map[id] = 0x01;
+
+		uint8_t node_id = m_reg[REG_7_1_NODEID];
+		uint8_t next_id = 0;
+
+		// search next higher id
+		for (int j = node_id; j <= 0xff; j++)
+		{
+			if (m_map[j] == 0x01)
+			{
+				next_id = j;
+				break;
+			}
+		}
+
+		if (next_id == 0)
+			// search lower ids, with fallback to ourselves
+			for (int j = 1; j <= node_id; j++)
+			{
+				if (m_map[j] == 0x01)
+				{
+					next_id = j;
+					break;
+				}
+			}
+
+		if (m_reg[REG_7_0_TENTID] == id)
+			m_reg[REG_1_DIAG] |= 0x04; // set TENTID
+
+		if (m_reg[REG_7_3_NEXTID] != next_id)
+		{
+			m_reg[REG_7_3_NEXTID] = next_id;
+			m_reg[REG_1_DIAG] |= 0x02; // set NEWNEXTID
+		}
+	}
+}
+
 void com20020_device::comm_tick()
 {
 	m_context->check_sockets();
@@ -808,7 +873,7 @@ void com20020_device::comm_tick()
 			// TODO: check config if we are allowed to send long packets?
 			// TODO: check for possible rollover
 
-			const auto lanc_ram = (u8*)m_ram.target();
+			const auto lanc_ram = (uint8_t*)m_ram.target();
 			std::copy_n(&lanc_ram[addr], frame_size, &m_buffer[0]);
 
 			// send to line and consider it done.
@@ -847,7 +912,7 @@ void com20020_device::comm_tick()
 					// TODO: check config if we are allowed to recv long packets?
 					// TODO: check for possible rollover
 
-					const auto lanc_ram = (u8*)m_ram.target();
+					const auto lanc_ram = (uint8_t*)m_ram.target();
 					std::copy_n(&m_buffer[0], frame_size, &lanc_ram[addr]);
 
 					m_cmd_rx = 0x00;
@@ -869,6 +934,7 @@ void com20020_device::comm_tick()
 					send_frame(data_size);
 				}
 
+				update_map(src_id);
 				update_irq();
 			}
 		}

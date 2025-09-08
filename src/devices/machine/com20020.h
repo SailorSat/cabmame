@@ -41,6 +41,7 @@ private:
 	uint8_t m_cmd_rx;
 	uint8_t m_cfg;
 	uint8_t m_txd;
+	uint8_t m_map[0x100];
 
 	emu_timer *m_tick_timer;
 
@@ -52,6 +53,7 @@ private:
 	TIMER_CALLBACK_MEMBER(tick_timer_callback);
 
 	void update_irq();
+	void update_map(uint8_t id);
 
 	void comm_tick();
 	unsigned read_frame(unsigned data_size);

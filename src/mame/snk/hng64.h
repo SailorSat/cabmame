@@ -338,6 +338,8 @@ private:
 	void hng64_com_w(offs_t offset, uint32_t data, uint32_t mem_mask = ~0);
 	void hng64_com_share_w(offs_t offset, uint8_t data);
 	uint8_t hng64_com_share_r(offs_t offset);
+	uint8_t hng64_com_kl80_r(offs_t offset);
+	void hng64_com_kl80_w(offs_t offset, uint8_t data);
 	void hng64_com_bank_w(uint8_t data);
 	void hng64_com_share_mips_w(offs_t offset, uint8_t data);
 	uint8_t hng64_com_share_mips_r(offs_t offset);

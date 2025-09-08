@@ -698,6 +698,7 @@ void hng64_state::hng_comm_map(address_map &map)
 	map(0x00000, 0x1ffff).rom().region("comm", 0);
 	map(0x20000, 0x3ffff).bankr(m_com_bank);
 	map(0x40000, 0x47fff).mirror(0xb8000).ram();
+	map(0x40000, 0x40fff).rw(FUNC(hng64_state::hng64_com_kl80_r), FUNC(hng64_state::hng64_com_kl80_w));
 }
 
 void hng64_state::hng_comm_io_map(address_map &map)
@@ -762,6 +763,25 @@ void hng64_state::hng64_com_w(offs_t offset, uint32_t data, uint32_t mem_mask)
 {
 	LOGMASKED(LOG_COMRW, "com write (PC=%08x): %08x %08x = %08x\n", m_maincpu->pc(), (offset*4)+0xc0000000, mem_mask, data);
 	COMBINE_DATA(&m_idt7133_dpram[offset]);
+}
+
+uint8_t hng64_state::hng64_com_kl80_r(offs_t offset)
+{
+	int offset32 = offset / 4;
+	int shift = (offset % 4) * 8;
+	return m_idt7133_dpram[offset32] >> shift;
+}
+
+void hng64_state::hng64_com_kl80_w(offs_t offset, uint8_t data)
+{
+	offs_t offset32 = offset / 4;
+	int shift = (offset % 4) * 8;
+	
+	uint32_t data32 = data << shift;
+	uint32_t mask32 = 0xff << shift;
+
+	// this IS dirty... is there a "correct" way to to it?
+	hng64_com_w(offset32, data32, mask32);
 }
 
 /* TODO: fully understand this */
